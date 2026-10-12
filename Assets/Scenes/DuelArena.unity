@@ -1517,7 +1517,8 @@ MonoBehaviour:
   forearm: {fileID: 98489873}
   upperArmLength: 1.05
   forearmLength: 1.15
-  armLength: 2.2
+  visualJointOverlap: 0.06
+  armLength: 1.4
   targetSmoothTime: 0.06
   maxHandSpeed: 18
   minimumAimHeight: -1.1
