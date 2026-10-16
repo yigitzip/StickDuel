@@ -35,6 +35,12 @@ namespace StickDuel
         [SerializeField, Range(0f, 180f)] private float outwardAngleLimit = 120f;
         [SerializeField, Range(60f, 120f)] private float restingAngleOffset = 120f;
 
+        [Header("Idle Return")]
+        [Tooltip("Arm angle changes below this threshold are treated as idle movement rather than a swing.")]
+        [SerializeField, Min(0f)] private float idleSwingThreshold = 7f;
+        [SerializeField, Min(0f)] private float idleReturnDelay = 2f;
+        [SerializeField, Min(0f)] private float idleReturnSpeed = 360f;
+
         [Header("Back Guard")]
         [Tooltip("World angle below horizontal the blade points to behind the back (wakigamae-like).")]
         [SerializeField, Range(0f, 80f)] private float backGuardDroop = 30f;
@@ -104,6 +110,7 @@ namespace StickDuel
         private bool trailIsSpin;
         private float chamberTime;
         private float thrustTimer;
+        private float idleTimer;
 
         public Fighter Owner => owner;
         public bool IsHeld { get; private set; } = true;
@@ -167,6 +174,18 @@ namespace StickDuel
             float armDelta = Mathf.DeltaAngle(previousArmAngle, armAngle);
             previousArmAngle = armAngle;
             unwrappedArmAngle += armDelta;
+            if (owner.backGuard || owner.thrustHeld)
+            {
+                idleTimer = 0f;
+            }
+            else if (Mathf.Abs(armDelta) > idleSwingThreshold)
+            {
+                idleTimer = 0f;
+            }
+            else
+            {
+                idleTimer += dt;
+            }
 
             int facing = owner.Facing;
             if (facing != previousFacing)
@@ -231,6 +250,15 @@ namespace StickDuel
             }
 
             UpdateBackGuard(armAngle, facing, dt);
+            if (!owner.backGuard && !owner.thrustHeld && idleTimer >= idleReturnDelay)
+            {
+                outwardLimit = Mathf.Max(outwardLimit, restingAngleOffset);
+                relativeTipAngle = Mathf.MoveTowards(
+                    relativeTipAngle,
+                    restingAngleOffset,
+                    idleReturnSpeed * dt);
+            }
+
             relativeTipAngle = Mathf.Clamp(relativeTipAngle, -inwardAngleLimit, outwardLimit);
 
             body.angularVelocity = 0f;
@@ -538,6 +566,7 @@ namespace StickDuel
             recoverUntil = 0f;
             chamberTime = 0f;
             thrustTimer = 0f;
+            idleTimer = 0f;
             hitCollider.enabled = true;
             lastHitTime.Clear();
 
