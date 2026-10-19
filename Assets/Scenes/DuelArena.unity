@@ -2074,6 +2074,7 @@ MonoBehaviour:
   playerSpawn: {x: -3, y: 1}
   enemySpawn: {x: 3, y: 1}
   roundsToWin: 3
+  enemyAI: 1
   playerFill: {fileID: 1274261787}
   playerLag: {fileID: 1419994753}
   enemyFill: {fileID: 1979999926}
