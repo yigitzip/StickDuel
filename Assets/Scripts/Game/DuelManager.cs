@@ -14,7 +14,7 @@ namespace StickDuel
         [SerializeField] private Vector2 enemySpawn = new Vector2(3f, Fighter.HipHeight + 0.05f);
         [SerializeField, Min(1)] private int roundsToWin = 3;
         [Tooltip("Off = the enemy is a training dummy: it stands still holding a guard but can still be hit and K.O.'d.")]
-        [SerializeField] private bool enemyAI;
+        [SerializeField] private bool enemyAI = true;
 
         [Header("HUD")]
         [SerializeField] private RectTransform playerFill;
