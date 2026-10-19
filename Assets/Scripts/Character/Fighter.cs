@@ -36,6 +36,19 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float lungeSpeed = 6.5f;
         [SerializeField, Min(0f)] private float lungeDuration = 0.16f;
 
+        [Header("Roll")]
+        [SerializeField, Min(0f)] private float rollSpeed = 8.5f;
+        [SerializeField, Min(0.05f)] private float rollDuration = 0.42f;
+        [SerializeField, Min(0f)] private float rollCooldown = 0.25f;
+        [SerializeField, Min(0f)] private float rollStaminaCost = 25f;
+
+        [Header("Punch (no sword)")]
+        [SerializeField, Min(0f)] private float punchDamage = 8f;
+        [SerializeField, Min(0.05f)] private float punchDuration = 0.24f;
+        [SerializeField, Min(0f)] private float punchCooldown = 0.15f;
+        [SerializeField, Min(0.1f)] private float punchReach = 0.85f;
+        [SerializeField, Min(0.05f)] private float punchRadius = 0.28f;
+
         [Header("Health")]
         [SerializeField, Min(1f)] private float maxHealth = 150f;
 
@@ -69,6 +82,14 @@ namespace StickDuel
         public float MoveSpeed => moveSpeed;
         public Rigidbody2D Body { get; private set; }
         public Vector2 ShoulderPosition => Body.position + Vector2.up * ShoulderHeight;
+        /// <summary>Rolling fighters cannot be hit.</summary>
+        public bool IsRolling => rollTimer > 0f;
+        public int RollDirection { get; private set; } = 1;
+        /// <summary>0→1 through a roll, -1 when not rolling (drives the tuck in the rig).</summary>
+        public float RollProgress => rollTimer > 0f ? 1f - rollTimer / rollDuration : -1f;
+        /// <summary>0 (arm in) → 1 (fully extended) → 0 through a punch.</summary>
+        public float PunchExtension => punchTimer > 0f ? Mathf.Sin((1f - punchTimer / punchDuration) * Mathf.PI) : 0f;
+        public Vector2 PunchDirection { get; private set; } = Vector2.right;
 
         public event Action<Fighter, float> Damaged;
         public event Action<Fighter> Died;
@@ -80,6 +101,12 @@ namespace StickDuel
         private float staggerTimer;
         private float lungeTimer;
         private float lastStaminaUse = -10f;
+        private float rollTimer;
+        private float rollReadyTime;
+        private float punchTimer;
+        private float punchReadyTime;
+        private bool punchLanded;
+        private readonly Collider2D[] punchHits = new Collider2D[8];
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void ConfigureLayerCollisions()
@@ -173,10 +200,17 @@ namespace StickDuel
 
             staggerTimer -= dt;
             lungeTimer -= dt;
+            rollTimer -= dt;
+            UpdatePunch(dt);
             bool canAct = ControlsEnabled && staggerTimer <= 0f;
             Vector2 velocity = Body.linearVelocity;
 
-            if (staggerTimer <= 0f && lungeTimer <= 0f)
+            if (rollTimer > 0f)
+            {
+                // Burst off the feet, then bleed speed as the roll opens up.
+                velocity.x = RollDirection * rollSpeed * Mathf.Lerp(1.2f, 0.55f, RollProgress);
+            }
+            else if (staggerTimer <= 0f && lungeTimer <= 0f)
             {
                 float target = canAct ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
                 float accel = IsGrounded ? groundAcceleration : airAcceleration;
@@ -222,6 +256,89 @@ namespace StickDuel
 
             lungeTimer = lungeDuration;
             Body.linearVelocity = new Vector2(Facing * lungeSpeed, Body.linearVelocity.y);
+        }
+
+        /// <summary>Ground roll to the left (-1) or right (+1); invulnerable while it lasts.</summary>
+        public void Roll(int direction)
+        {
+            if (!ControlsEnabled || IsDead || !IsGrounded || staggerTimer > 0f || rollTimer > 0f || Time.time < rollReadyTime)
+            {
+                return;
+            }
+
+            if (!TrySpendStamina(rollStaminaCost))
+            {
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Callout(ShoulderPosition + Vector2.up * 0.6f, "TIRED", new Color(0.75f, 0.75f, 0.8f), 0.7f);
+                }
+
+                return;
+            }
+
+            RollDirection = direction >= 0 ? 1 : -1;
+            rollTimer = rollDuration;
+            rollReadyTime = Time.time + rollDuration + rollCooldown;
+            punchTimer = 0f;
+        }
+
+        /// <summary>Unarmed jab towards the aim point.</summary>
+        public void Punch()
+        {
+            if (!ControlsEnabled || IsDead || staggerTimer > 0f || rollTimer > 0f || Time.time < punchReadyTime)
+            {
+                return;
+            }
+
+            Vector2 aim = aimPoint - ShoulderPosition;
+            PunchDirection = aim.sqrMagnitude > 0.0001f ? aim.normalized : new Vector2(Facing, 0f);
+            punchTimer = punchDuration;
+            punchReadyTime = Time.time + punchDuration + punchCooldown;
+            punchLanded = false;
+        }
+
+        /// <summary>The fist connects once, around full extension.</summary>
+        private void UpdatePunch(float dt)
+        {
+            if (punchTimer <= 0f)
+            {
+                return;
+            }
+
+            punchTimer -= dt;
+            if (punchLanded || PunchExtension < 0.8f)
+            {
+                return;
+            }
+
+            Vector2 fist = ShoulderPosition + PunchDirection * punchReach;
+            var filter = new ContactFilter2D { useTriggers = true };
+            int count = Physics2D.OverlapCircle(fist, punchRadius, filter, punchHits);
+            for (int i = 0; i < count; i++)
+            {
+                Rigidbody2D rb = punchHits[i].attachedRigidbody;
+                Fighter victim = rb != null ? rb.GetComponent<Fighter>() : null;
+                if (victim == null || victim == this || victim.IsDead || victim.IsRolling)
+                {
+                    continue;
+                }
+
+                punchLanded = true;
+                bool headshot = false;
+                for (int j = 0; j < count; j++)
+                {
+                    headshot |= punchHits[j] == victim.headCollider;
+                }
+
+                float damage = headshot ? punchDamage * 1.5f : punchDamage;
+                victim.TakeHit(damage, new Vector2(Mathf.Sign(PunchDirection.x) * 3f, 1.2f), headshot);
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Hit(fist, PunchDirection, victim.color, damage, headshot);
+                }
+
+                return;
+            }
         }
 
         /// <summary>Locks movement briefly, e.g. after your blade was parried.</summary>
@@ -280,6 +397,8 @@ namespace StickDuel
             backGuard = false;
             thrustHeld = false;
             lungeTimer = 0f;
+            rollTimer = 0f;
+            punchTimer = 0f;
             jumpRequestTime = -1f;
 
             Body.constraints = RigidbodyConstraints2D.FreezeRotation;

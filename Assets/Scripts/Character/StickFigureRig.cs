@@ -13,8 +13,9 @@ namespace StickDuel
     {
         // Proportions in world units. Hip→shoulder must match Fighter.ShoulderHeight (0.64) and
         // hip→head centre the HeadHitbox (0.99).
-        private const float Thigh = 0.5f;
-        private const float Shin = 0.47f;
+        // Legs are just shorter than hip→ankle so the idle stance has only a slight knee bend.
+        private const float Thigh = 0.47f;
+        private const float Shin = 0.45f;
         private const float AnkleHeight = 0.05f;
         private const float FootLength = 0.17f;
         private const float Waist = 0.4f;
@@ -35,8 +36,9 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float outlineWidth = 0.06f;
         [SerializeField, Min(0.1f)] private float strideLength = 0.62f;
 
-        private Line spine, frontLeg, backLeg, frontArm, backArm, band, eye, ribbon;
+        private Line spine, frontLeg, backLeg, frontArm, backArm, band, eye, ribbon, belt;
         private Dot head, frontHand, backHand;
+        private SpriteRenderer headShine;
         private Color accent;
 
         // Spin attack: the drawn body is squashed horizontally by cos(turn) around the hip, which
@@ -48,6 +50,14 @@ namespace StickDuel
         private bool wasGrounded = true;
         private Vector2 flinch, flinchVelocity, freeBackHand;
         private readonly bool[] footLifted = new bool[2];
+
+        // Switching pose (stand ↔ roll ↔ dead) eases the limbs over from the last drawn pose.
+        private int poseState;
+        private float blendTime, blendDuration;
+        private Vector2 lastHeadCenter, lastHeadUp = Vector2.up, headFrom, headUpFrom = Vector2.up;
+        private float headWeight = 1f;
+        private int rollDust;
+        private static readonly float[] RollDustAt = { 0.04f, 0.5f, 0.9f };
         private readonly Vector2[] ribbonPoints = new Vector2[5];
         private readonly Vector2[] ribbonPrevious = new Vector2[5];
 
@@ -57,9 +67,22 @@ namespace StickDuel
         {
             public LineRenderer Fill;
             public LineRenderer Outline;
+            public LineRenderer Highlight; // lighter stripe nudged towards the light (upper left)
+            /// <summary>Below 1 the drawn pose is still easing in from the captured one.</summary>
+            public float Weight = 1f;
             private readonly Vector3[] points;
+            private readonly Vector3[] lit;
+            private readonly Vector3[] from;
+            private static readonly Vector3 LightOffset = new Vector3(-0.012f, 0.016f, -0.001f); // -z: sorts in front of the fill at the same order
 
-            public Line(int count) => points = new Vector3[count];
+            public Line(int count)
+            {
+                points = new Vector3[count];
+                lit = new Vector3[count];
+                from = new Vector3[count];
+            }
+
+            public void Capture() => System.Array.Copy(points, from, points.Length);
 
             public void Set(Vector2 a, Vector2 b) { points[0] = a; points[1] = b; Apply(); }
             public void Set(Vector2 a, Vector2 b, Vector2 c) { points[0] = a; points[1] = b; points[2] = c; Apply(); }
@@ -77,6 +100,14 @@ namespace StickDuel
 
             private void Apply()
             {
+                if (Weight < 1f)
+                {
+                    for (int i = 0; i < points.Length; i++)
+                    {
+                        points[i] = Vector3.Lerp(from[i], points[i], Weight);
+                    }
+                }
+
                 Fill.positionCount = points.Length;
                 Fill.SetPositions(points);
                 if (Outline != null)
@@ -84,12 +115,29 @@ namespace StickDuel
                     Outline.positionCount = points.Length;
                     Outline.SetPositions(points);
                 }
+
+                if (Highlight != null)
+                {
+                    for (int i = 0; i < points.Length; i++)
+                    {
+                        lit[i] = points[i] + LightOffset;
+                    }
+
+                    Highlight.positionCount = points.Length;
+                    Highlight.SetPositions(lit);
+                }
             }
 
             public void SetColor(Color color)
             {
                 Fill.startColor = color;
                 Fill.endColor = color;
+                if (Highlight != null)
+                {
+                    Color shine = Color.Lerp(color, Color.white, 0.45f);
+                    Highlight.startColor = shine;
+                    Highlight.endColor = shine;
+                }
             }
         }
 
@@ -97,9 +145,15 @@ namespace StickDuel
         {
             public SpriteRenderer Fill;
             public SpriteRenderer Outline;
+            public float Weight = 1f;
+            private Vector2 last, from;
+
+            public void Capture() => from = last;
 
             public void Place(Vector2 position)
             {
+                position = Vector2.Lerp(from, position, Weight);
+                last = position;
                 var p = new Vector3(position.x, position.y, 0f);
                 Fill.transform.position = p;
                 Outline.transform.position = p;
@@ -114,16 +168,19 @@ namespace StickDuel
             ribbon = CreateLine("Ribbon", 5, 8, 0.06f, Taper(1f, 0.3f), accent, false);
             backLeg = CreateLine("BackLeg", 4, 9, 0.15f, Taper(1.1f, 0.75f, 0.65f), fighter.color, true);
             backArm = CreateLine("BackArm", 3, 10, 0.12f, Taper(1.1f, 0.75f), fighter.color, true);
-            spine = CreateLine("Spine", 4, 11, 0.2f, new AnimationCurve(
-                new Keyframe(0f, 0.85f), new Keyframe(0.5f, 1.1f), new Keyframe(0.82f, 0.75f), new Keyframe(1f, 0.45f)), fighter.color, true);
+            // Torso: hips, narrower waist, broad chest/shoulders, then the neck.
+            spine = CreateLine("Spine", 4, 11, 0.22f, new AnimationCurve(
+                new Keyframe(0f, 0.95f), new Keyframe(0.25f, 0.8f), new Keyframe(0.62f, 1.15f), new Keyframe(0.85f, 0.7f), new Keyframe(1f, 0.42f)), fighter.color, true);
             frontLeg = CreateLine("FrontLeg", 4, 12, 0.15f, Taper(1.1f, 0.75f, 0.65f), fighter.color, true);
             frontArm = CreateLine("FrontArm", 3, 15, 0.12f, Taper(1.1f, 0.75f), fighter.color, true);
+            belt = CreateLine("Obi", 2, 13, 0.07f, Taper(1f, 1f), accent, true);
             band = CreateLine("Hachimaki", 2, 14, 0.07f, Taper(1f, 1f), accent, false);
             eye = CreateLine("Eye", 2, 14, 0.035f, Taper(1f, 0.6f), outlineColor, false);
 
             head = CreateDot("Head", 13, new Vector2(HeadRadius * 2f, HeadRadius * 2.15f));
             frontHand = CreateDot("FrontHand", 16, Vector2.one * HandRadius * 2f);
             backHand = CreateDot("BackHand", 16, Vector2.one * HandRadius * 2f);
+            headShine = CreateSprite("HeadShine", 14, Color.white, new Vector2(0.07f, 0.05f));
             Snap();
         }
 
@@ -148,6 +205,7 @@ namespace StickDuel
             {
                 float outlineTotal = width * thickness + outlineWidth;
                 line.Outline = CreateRenderer(lineName + "Outline", 2, outlineTotal, taper, outlineColor);
+                line.Highlight = CreateRenderer(lineName + "Shine", order, width * thickness * 0.35f, taper, color);
             }
 
             return line;
@@ -203,6 +261,9 @@ namespace StickDuel
             flinch = flinchVelocity = Vector2.zero;
             flashTimer = 0f;
             wasGrounded = true;
+            poseState = 0;
+            blendTime = blendDuration = 0f;
+            SetBlendWeight(1f);
             freeBackHand = fighter.ShoulderPosition + new Vector2(-fighter.Facing * 0.2f, -0.55f);
             Vector2 knot = (Vector2)transform.position + new Vector2(-fighter.Facing * 0.2f, 1.04f);
             for (int i = 0; i < ribbonPoints.Length; i++)
@@ -234,15 +295,58 @@ namespace StickDuel
             head.Fill.color = front;
             frontHand.Fill.color = front;
             backHand.Fill.color = back;
+            headShine.color = Color.Lerp(front, Color.white, 0.55f);
+
+            int state = fighter.IsDead ? 2 : fighter.IsRolling ? 1 : 0;
+            if (state != poseState)
+            {
+                if (poseState == 1 && state == 0)
+                {
+                    landDip = Mathf.Max(landDip, 0.14f); // come out of the roll low and rise
+                }
+
+                rollDust = 0;
+                poseState = state;
+                StartBlend(state == 1 ? 0.07f : 0.14f);
+            }
+
+            blendTime += dt;
+            SetBlendWeight(blendDuration > 0f ? Mathf.SmoothStep(0f, 1f, blendTime / blendDuration) : 1f);
 
             if (fighter.IsDead)
             {
                 DrawDead(dt);
             }
+            else if (fighter.IsRolling)
+            {
+                DrawRoll(fighter.RollProgress, dt);
+            }
             else
             {
                 DrawAlive(dt);
             }
+        }
+
+        private void StartBlend(float duration)
+        {
+            foreach (Line line in new[] { spine, frontLeg, backLeg, frontArm, backArm, belt })
+            {
+                line.Capture();
+            }
+
+            frontHand.Capture();
+            backHand.Capture();
+            headFrom = lastHeadCenter;
+            headUpFrom = lastHeadUp;
+            blendTime = 0f;
+            blendDuration = duration;
+        }
+
+        private void SetBlendWeight(float weight)
+        {
+            spine.Weight = frontLeg.Weight = backLeg.Weight = frontArm.Weight = backArm.Weight = belt.Weight = weight;
+            frontHand.Weight = backHand.Weight = weight;
+            headWeight = weight;
         }
 
         private void DrawAlive(float dt)
@@ -280,11 +384,11 @@ namespace StickDuel
             spinScale = spin >= 0f ? Mathf.Cos(spin * Mathf.PI * 2f) : 1f;
             spinPivotX = hip.x;
             float spinCrouch = spin >= 0f ? Mathf.Sin(spin * Mathf.PI) * 0.12f : 0f;
-            float crouch = -0.06f * (1f - walkBlend) * (1f - airBlend) - spinCrouch;
+            float crouch = -0.025f * (1f - walkBlend) * (1f - airBlend) - spinCrouch;
             Vector2 pelvis = hip + new Vector2(sway, bob + crouch - landDip);
 
             // Spine: lean into motion, away from hits, slightly forward in stance.
-            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - flinch.x * 35f - facing * (5f + landDip * 40f) * (1f - airBlend);
+            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
             lean = Mathf.Clamp(Mathf.Lerp(lean, -targetLean, 1f - Mathf.Exp(-10f * dt)), -18f, 18f);
             Vector2 up = Rotate(Vector2.up, -lean);
             Vector2 chest = pelvis + up * Waist + right * 0.02f + flinch * 0.4f + Vector2.up * breathe;
@@ -301,6 +405,7 @@ namespace StickDuel
             Vector2 backShoulder = shoulderBase - right * 0.035f;
 
             spine.Set(S(pelvis), S(chest), S(neckBase), S(neckBase + headUp * Neck));
+            DrawBelt(pelvis, up, true);
             DrawHead(S(headCenter), headUp, facing, dt);
             DrawLegs(hip, pelvis, velocity, facing, grounded);
             DrawArms(frontShoulder, backShoulder, facing, dt);
@@ -323,7 +428,7 @@ namespace StickDuel
                 Vector2 hipJoint = pelvis + right * (isFront ? 0.05f : -0.04f);
 
                 // Fencing stance: lead foot forward, rear foot back and turned.
-                Vector2 idle = new Vector2(hip.x + (isFront ? 0.25f : -0.2f) * facing, groundY + AnkleHeight);
+                Vector2 idle = new Vector2(hip.x + (isFront ? 0.22f : -0.17f) * facing, groundY + AnkleHeight);
 
                 float phase = gaitPhase + i * Mathf.PI;
                 float lift = Mathf.Max(0f, -Mathf.Sin(phase));
@@ -356,6 +461,13 @@ namespace StickDuel
             // Sword hand rides on the hilt (interpolated transform = what is drawn). If the drawn
             // shoulder is a bit off, stretch the arm slightly rather than leave a gap.
             Vector2 grip = held ? (Vector2)sword.transform.position : frontShoulder + new Vector2(facing * 0.3f, -0.6f);
+            if (!held)
+            {
+                // Unarmed jab: the fist shoots out towards the aim and comes back.
+                Vector2 jab = frontShoulder + fighter.PunchDirection * (UpperArm + Forearm) * 0.97f;
+                grip = Vector2.Lerp(grip, jab, fighter.PunchExtension);
+            }
+
             Vector2 hand = grip;
             // Shoulders turn with the spinning body; the sword hand stays on the real (physics) grip.
             frontShoulder = S(frontShoulder);
@@ -384,12 +496,22 @@ namespace StickDuel
 
         private void DrawHead(Vector2 center, Vector2 headUp, int facing, float dt)
         {
+            if (headWeight < 1f)
+            {
+                center = Vector2.Lerp(headFrom, center, headWeight);
+                headUp = ((Vector2)Vector3.Slerp(headUpFrom, headUp, headWeight)).normalized;
+            }
+
+            lastHeadCenter = center;
+            lastHeadUp = headUp;
             head.Place(center);
             float angle = Mathf.Atan2(headUp.y, headUp.x) * Mathf.Rad2Deg - 90f;
             head.Fill.transform.rotation = Quaternion.Euler(0f, 0f, angle);
             head.Outline.transform.rotation = head.Fill.transform.rotation;
 
             Vector2 headRight = new Vector2(headUp.y, -headUp.x); // headUp rotated -90°
+            headShine.transform.position = center + headUp * 0.12f - headRight * 0.05f;
+            headShine.transform.rotation = head.Fill.transform.rotation;
             Vector2 bandCenter = center + headUp * 0.06f;
             float halfWidth = HeadRadius * 1.02f * Mathf.Max(Mathf.Abs(spinScale), 0.15f);
             band.Set(bandCenter - headRight * halfWidth, bandCenter + headRight * halfWidth);
@@ -430,6 +552,71 @@ namespace StickDuel
             ribbon.Set(ribbonPoints);
         }
 
+        /// <summary>
+        /// Forward roll in three beats: drop into a low crouch and tuck, turn one full revolution as
+        /// a ball (eased: slow in, fast through the middle, slow out), then open back up into the
+        /// crouch. Each joint lerps between a crouch pose (ground space) and a ball pose (rotating
+        /// around the ball centre), so tucking and opening are continuous with the spin.
+        /// </summary>
+        private void DrawRoll(float progress, float dt)
+        {
+            spinScale = 1f;
+            int dir = fighter.RollDirection;
+            Vector2 hip = transform.position;
+            Vector2 ground = new Vector2(hip.x, hip.y - Fighter.HipHeight);
+            Vector2 ballCenter = ground + Vector2.up * 0.5f; // ball radius ~0.5 (head), so it never sinks into the floor
+            float tuck = Mathf.SmoothStep(0f, 1f, progress / 0.2f) * Mathf.SmoothStep(0f, 1f, (1f - progress) / 0.25f);
+            float turn = progress * progress * (3f - 2f * progress);
+            float angle = -dir * 360f * turn;
+
+            // (cx, cy) = crouch pose above the ground point, (bx, by) = ball pose around its centre.
+            Vector2 J(float cx, float cy, float bx, float by)
+                => Vector2.Lerp(ground + new Vector2(cx * dir, cy), ballCenter + Rotate(new Vector2(bx * dir, by), angle), tuck);
+
+            Vector2 pelvis = J(-0.05f, 0.62f, -0.12f, -0.12f);
+            Vector2 chest = J(0.12f, 0.95f, -0.1f, 0.15f);
+            Vector2 neckBase = J(0.27f, 1.13f, 0f, 0.24f);
+            Vector2 crouchUp = new Vector2(0.45f * dir, 0.9f).normalized;
+            Vector2 ballUp = Rotate(new Vector2(0.95f * dir, -0.32f).normalized, angle);
+            Vector2 headUp = Vector2.Lerp(crouchUp, ballUp, tuck).normalized;
+
+            spine.Set(pelvis, chest, neckBase, neckBase + headUp * Neck);
+            DrawBelt(pelvis, (chest - pelvis).normalized, false);
+            DrawHead(neckBase + headUp * (Neck + HeadRadius), headUp, dir, dt);
+
+            // Crouch: lead knee forward, rear knee low; ball: knees pulled to the chest.
+            frontLeg.Set(pelvis, J(0.33f, 0.42f, 0.28f, 0.13f), J(0.12f, AnkleHeight, 0.06f, -0.26f), J(0.29f, 0.03f, 0.2f, -0.3f));
+            backLeg.Set(pelvis, J(0.15f, 0.25f, 0.24f, 0.06f), J(-0.27f, 0.08f, 0f, -0.3f), J(-0.1f, 0.03f, 0.14f, -0.36f));
+
+            // Arms brace forward in the crouch and hug the shins in the ball; the sword hand stays
+            // on the hilt while the blade is held.
+            Sword sword = fighter.sword;
+            Vector2 frontShoulder = J(0.24f, 1.07f, 0.02f, 0.2f);
+            Vector2 hand = sword != null && sword.IsHeld ? (Vector2)sword.transform.position : J(0.55f, 0.5f, 0.18f, -0.14f);
+            float stretch = Mathf.Max(1f, Vector2.Distance(frontShoulder, hand) / (UpperArm + Forearm - 0.002f));
+            Vector2 elbow = SolveJoint(frontShoulder, ref hand, UpperArm * stretch, Forearm * stretch, -dir);
+            frontArm.Set(frontShoulder, elbow, hand);
+            frontHand.Place(hand);
+
+            Vector2 backShoulder = J(0.2f, 1.07f, -0.02f, 0.2f);
+            Vector2 offHand = J(0.42f, 0.42f, 0.12f, -0.2f);
+            Vector2 offElbow = SolveJoint(backShoulder, ref offHand, UpperArm, Forearm, -dir);
+            backArm.Set(backShoulder, offElbow, offHand);
+            backHand.Place(offHand);
+            freeBackHand = offHand;
+            twoHand = 0f;
+
+            // Dust as the feet push off, the back meets the floor and the feet land again.
+            while (rollDust < RollDustAt.Length && progress >= RollDustAt[rollDust])
+            {
+                rollDust++;
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Step(ground, 1f);
+                }
+            }
+        }
+
         private void DrawDead(float dt)
         {
             spinScale = 1f;
@@ -444,6 +631,7 @@ namespace StickDuel
             Vector2 away = Vector2.Dot(side, Vector2.up) >= 0f ? side : -side;
 
             spine.Set(hip, chest, neckBase, neckBase + up * Neck);
+            DrawBelt(hip, up, false);
             Vector2 frontAnkle = hip - up * (Thigh + Shin) + away * 0.04f;
             Vector2 backAnkle = hip - up * (Thigh + Shin) + away * 0.14f;
             frontLeg.Set(hip, hip - up * Thigh + away * 0.1f, frontAnkle, frontAnkle + away * FootLength);
@@ -457,6 +645,13 @@ namespace StickDuel
             backHand.Place(backEnd);
 
             DrawHead(neckBase + up * (Neck + HeadRadius), up, fighter.Facing, dt);
+        }
+
+        private void DrawBelt(Vector2 pelvis, Vector2 up, bool spun)
+        {
+            Vector2 c = pelvis + up * 0.08f;
+            Vector2 half = new Vector2(up.y, -up.x) * 0.1f;
+            belt.Set(spun ? S(c - half) : c - half, spun ? S(c + half) : c + half);
         }
 
         // ------------------------------------------------------------------ math

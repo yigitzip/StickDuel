@@ -353,16 +353,60 @@ def swoosh():
     return n * env * 2.2
 
 
+def highpass(x, alpha):
+    return x - lowpass(x, alpha)
+
+
+def reverb(x, sec=0.7, wet=0.2, seed=0):
+    """Small hall: convolve with a decaying, darkening noise tail (FFT convolution)."""
+    t = t_axis(sec)
+    tail = np.random.default_rng(seed).standard_normal(len(t)) * np.exp(-7.0 * t)
+    tail = lowpass(tail, 0.35)
+    tail /= np.sqrt(np.sum(tail ** 2))
+    n = len(x) + len(tail) - 1
+    size = 1 << (n - 1).bit_length()
+    wet_sig = np.fft.irfft(np.fft.rfft(x, size) * np.fft.rfft(tail, size), size)[:len(x)]
+    return x + wet_sig * wet * 6.0
+
+
 def clang(seed=0):
-    tt = np.arange(int(SR * 1.1), dtype=np.float64) / SR
-    partials = [(1180, 1.0, 5.0), (1840, 0.7, 6.5), (2710, 0.5, 8.0), (3650, 0.35, 10.0), (5120, 0.2, 14.0)]
+    """Two katana blades meeting: each blade rings with the inharmonic modes of a free bar
+    (1 : 2.76 : 5.40 : 8.93 : 13.34), detuned pairs make the shimmer, higher modes die faster.
+    A sharp strike transient and a short steel-on-steel scrape ("shing") sit on top, then a
+    small hall reverb so it does not sound dry and synthetic."""
     r = np.random.default_rng(seed)
-    out = np.zeros(len(tt))
-    for freq, amp, decay in partials:
-        freq *= r.uniform(0.97, 1.03)
-        out += amp * np.sin(math.tau * freq * tt + r.uniform(0, 6)) * np.exp(-decay * tt)
-    click = np.random.default_rng(seed + 9).standard_normal(len(tt)) * np.exp(-90.0 * tt)
-    return out * 0.45 + click * 0.5
+    sec = 1.3
+    t = t_axis(sec)
+    out = np.zeros(len(t))
+    ratios = [1.0, 2.756, 5.404, 8.933, 13.344]
+    for blade, f0 in enumerate([r.uniform(980, 1100), r.uniform(1180, 1300)]):
+        for k, ratio in enumerate(ratios):
+            f = f0 * ratio * r.uniform(0.985, 1.015)
+            if f > 15000:
+                continue
+            amp = r.uniform(0.6, 1.0) / (k + 1) ** 0.55 * (1.0 if blade == 0 else 0.75)
+            decay = 4.0 + f / 500.0
+            beat = 1.0 + r.uniform(0.0008, 0.0025)
+            # Tiny downward pitch settle right after impact.
+            bend = 1.0 + 0.006 * np.exp(-60.0 * t)
+            phase = math.tau * f * np.cumsum(bend) / SR
+            tone = np.sin(phase + r.uniform(0, 6)) + 0.6 * np.sin(phase * beat + r.uniform(0, 6))
+            out += amp * tone * np.exp(-decay * t)
+
+    noise = r.standard_normal(len(t))
+    strike = highpass(noise, 0.25) * np.exp(-260.0 * t) * 3.0
+    knock = (lowpass(noise, 0.3) - lowpass(noise, 0.05)) * np.exp(-55.0 * t) * 1.4
+    # Scrape: bright noise, grainy (blade edges chattering along each other), ~120 ms.
+    grain = 0.5 + 0.5 * np.sign(np.sin(math.tau * r.uniform(90, 140) * t + r.standard_normal(len(t)) * 0.6))
+    scrape_env = np.clip(t / 0.006, 0, 1) * np.exp(-18.0 * t)
+    scrape = highpass(r.standard_normal(len(t)), 0.55) * grain * scrape_env * 0.55
+
+    attack = np.clip(t / 0.0006, 0, 1)
+    dry = (out * 0.2 + strike + knock + scrape) * attack
+    dry = np.tanh(dry * 1.3)  # a little bite on the transient
+    wet = reverb(dry, seed=seed + 31)
+    fade = np.clip((sec - t) / 0.15, 0, 1)
+    return wet * fade
 
 
 def hit():

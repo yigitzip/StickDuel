@@ -111,9 +111,13 @@ namespace StickDuel
         private float chamberTime;
         private float thrustTimer;
         private float idleTimer;
+        private bool flying; // thrown and not yet landed: the edge still cuts
+        private bool wasRolling;
 
         public Fighter Owner => owner;
         public bool IsHeld { get; private set; } = true;
+        /// <summary>Thrown and not yet landed.</summary>
+        public bool IsFlying => flying;
         public Vector2 GripPosition => body.position;
         public Vector2 TipPosition => tip.position;
         public Vector2 TipVelocity => Vector2.ClampMagnitude(PointVelocity(tip.position), maxSwingSpeed);
@@ -185,6 +189,24 @@ namespace StickDuel
             else
             {
                 idleTimer += dt;
+            }
+
+            if (owner.IsRolling)
+            {
+                // Held flat, trailing behind the roll, so it never digs into the floor.
+                float behind = owner.RollDirection > 0 ? 180f : 0f;
+                body.angularVelocity = 0f;
+                body.MoveRotation(Mathf.MoveTowardsAngle(body.rotation, behind, 1500f * dt));
+                previousFacing = owner.Facing;
+                spinTimer = 0f;
+                wasRolling = true;
+                return;
+            }
+
+            if (wasRolling)
+            {
+                wasRolling = false;
+                ResyncBlade(owner.Facing);
             }
 
             int facing = owner.Facing;
@@ -366,6 +388,12 @@ namespace StickDuel
                 return shoulder + new Vector2(owner.Facing * reach * turn, -0.1f);
             }
 
+            if (owner.IsRolling)
+            {
+                // Tucked in: the hand rides along with the ball near the ground.
+                return owner.Body.position + new Vector2(owner.RollDirection * 0.2f, -0.45f);
+            }
+
             float distance = owner.thrustHeld && !owner.backGuard ? chamberReach : reach;
             Vector2 target = shoulder + direction * distance;
             target.y = Mathf.Max(target.y, shoulder.y + minHandHeight);
@@ -416,13 +444,13 @@ namespace StickDuel
 
         private void OnTriggerStay2D(Collider2D other)
         {
-            if (!IsHeld || IsStaggered || Time.time < recoverUntil || !owner.ControlsEnabled || owner.IsDead || other.attachedRigidbody == null)
+            if (!(IsHeld || flying) || IsStaggered || Time.time < recoverUntil || !owner.ControlsEnabled || owner.IsDead || other.attachedRigidbody == null)
             {
                 return;
             }
 
             Fighter victim = other.attachedRigidbody.GetComponent<Fighter>();
-            if (victim == null || victim == owner || victim.IsDead)
+            if (victim == null || victim == owner || victim.IsDead || victim.IsRolling)
             {
                 return;
             }
@@ -443,6 +471,11 @@ namespace StickDuel
 
             lastHitTime[victim] = Time.time;
             recoverUntil = Time.time + recoveryAfterHit;
+            if (flying)
+            {
+                Land(); // a thrown blade hits once, then just falls
+            }
+
             bool headshot = other == victim.headCollider;
             bool backstab = victim.IsBehind(owner);
             float damage = Mathf.Min(maxDamage, (speed - minHitSpeed * 0.5f) * damagePerSpeed);
@@ -487,6 +520,11 @@ namespace StickDuel
 
         private void OnCollisionEnter2D(Collision2D collision)
         {
+            if (flying && collision.rigidbody == null)
+            {
+                Land();
+            }
+
             if (!IsHeld || collision.rigidbody == null)
             {
                 return;
@@ -542,13 +580,44 @@ namespace StickDuel
 
         public void Drop()
         {
+            Release();
+            // Let it fall where the fighter fell instead of sliding across the arena.
+            body.linearVelocity *= 0.3f;
+            body.angularVelocity = Random.Range(-250f, 250f);
+            Land();
+        }
+
+        /// <summary>Lets go of the blade with <paramref name="velocity"/>, cartwheeling; it cuts until it lands.</summary>
+        public void Throw(Vector2 velocity)
+        {
+            Release();
+            body.linearVelocity = velocity;
+            body.linearDamping = 0.1f;
+            body.angularVelocity = -Mathf.Sign(velocity.x == 0f ? owner.Facing : velocity.x) * 900f;
+            flying = true;
+            hitCollider.enabled = true;
+            lastHitTime.Clear();
+            recoverUntil = 0f;
+            if (trail != null)
+            {
+                trail.emitting = true;
+            }
+        }
+
+        private void Release()
+        {
             IsHeld = false;
             gripJoint.enabled = false;
             body.gravityScale = 1.5f;
-            // Let it fall where the fighter fell instead of sliding across the arena.
-            body.linearVelocity *= 0.3f;
+            staggerTimer = 0f;
+            spinTimer = 0f;
+        }
+
+        /// <summary>On the ground (or after a thrown hit): harmless and sliding to a stop.</summary>
+        private void Land()
+        {
+            flying = false;
             body.linearDamping = 2f;
-            body.angularVelocity = Random.Range(-250f, 250f);
             hitCollider.enabled = false;
             if (trail != null)
             {
@@ -559,6 +628,7 @@ namespace StickDuel
         public void Regrip()
         {
             IsHeld = true;
+            flying = false;
             body.gravityScale = 0f;
             body.linearDamping = 0.1f;
             staggerTimer = 0f;

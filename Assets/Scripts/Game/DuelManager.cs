@@ -38,6 +38,8 @@ namespace StickDuel
         private Coroutine flow;
         private RectTransform playerStamina;
         private RectTransform enemyStamina;
+        private PlayerDriver playerThrower;
+        private Image[] shurikenIcons;
 
         public int Round => round;
         public int PlayerScore => playerScore;
@@ -61,6 +63,12 @@ namespace StickDuel
             enemyName.color = enemy.color;
             playerStamina = CreateStaminaBar(playerFill, playerPips, false);
             enemyStamina = CreateStaminaBar(enemyFill, enemyPips, true);
+            playerThrower = player.GetComponent<PlayerDriver>();
+            if (playerThrower != null)
+            {
+                shurikenIcons = CreateShurikenIcons(playerFill, playerThrower.MaxShuriken);
+            }
+
             flow = StartCoroutine(Match());
         }
 
@@ -91,8 +99,68 @@ namespace StickDuel
             return fill;
         }
 
+        /// <summary>
+        /// One shuriken per remaining throw, in the pips row next to the round pips. Each slot has a
+        /// dim silhouette behind a radial fill, so an empty set visibly refills while reloading.
+        /// </summary>
+        private static Image[] CreateShurikenIcons(RectTransform healthFill, int count)
+        {
+            var frame = (RectTransform)healthFill.parent;
+            float outerEdge = frame.anchoredPosition.x - frame.sizeDelta.x * 0.5f;
+            var icons = new Image[count];
+            for (int i = 0; i < count; i++)
+            {
+                var slot = new GameObject("Shuriken" + i, typeof(RectTransform));
+                var rect = (RectTransform)slot.transform;
+                rect.SetParent(frame.parent, false);
+                rect.anchorMin = rect.anchorMax = frame.anchorMin;
+                rect.sizeDelta = new Vector2(40f, 40f);
+                rect.anchoredPosition = new Vector2(outerEdge + 205f + i * 46f, frame.anchoredPosition.y - 66f);
+
+                Image back = slot.AddComponent<Image>();
+                back.sprite = Shuriken.Sprite;
+                back.color = new Color(0.1f, 0.06f, 0.14f, 0.6f);
+                back.raycastTarget = false;
+
+                var front = new GameObject("Fill", typeof(RectTransform)).AddComponent<Image>();
+                front.rectTransform.SetParent(rect, false);
+                front.rectTransform.anchorMin = Vector2.zero;
+                front.rectTransform.anchorMax = Vector2.one;
+                front.rectTransform.sizeDelta = Vector2.zero;
+                front.sprite = Shuriken.Sprite;
+                front.type = Image.Type.Filled;
+                front.fillMethod = Image.FillMethod.Radial360;
+                front.fillOrigin = (int)Image.Origin360.Top;
+                front.fillClockwise = true;
+                front.raycastTarget = false;
+                icons[i] = front;
+            }
+
+            return icons;
+        }
+
+        private void UpdateShurikenIcons()
+        {
+            if (shurikenIcons == null)
+            {
+                return;
+            }
+
+            int count = playerThrower.ShurikenCount;
+            float reload = playerThrower.ReloadProgress;
+            for (int i = 0; i < shurikenIcons.Length; i++)
+            {
+                bool ready = i < count;
+                Image icon = shurikenIcons[i];
+                icon.fillAmount = ready ? 1f : reload;
+                // Refilling icons stay greyed out until the set is back.
+                icon.color = ready ? Color.white : new Color(0.55f, 0.55f, 0.6f, 0.8f);
+            }
+        }
+
         private void Update()
         {
+            UpdateShurikenIcons();
             UpdateBar(playerFill, playerLag, player, ref playerLagValue, false);
             UpdateBar(enemyFill, enemyLag, enemy, ref enemyLagValue, true);
             SetBar(playerStamina, player.Stamina / player.MaxStamina, false);
@@ -205,6 +273,11 @@ namespace StickDuel
         {
             player.ResetFighter(playerSpawn);
             enemy.ResetFighter(enemySpawn);
+            if (playerThrower != null)
+            {
+                playerThrower.RefillShuriken();
+            }
+
             playerLagValue = enemyLagValue = 1f;
         }
 

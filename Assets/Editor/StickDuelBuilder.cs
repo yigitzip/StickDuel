@@ -355,7 +355,7 @@ namespace StickDuel.EditorTools
             Text center = CreateText("CenterText", canvasGo.transform, 150, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(1600f, 220f));
             Text sub = CreateText("SubText", canvasGo.transform, 42, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(1600f, 80f));
             Text hint = CreateText("HintText", canvasGo.transform, 28, TextAnchor.MiddleCenter, new Vector2(0.5f, 0f), new Vector2(0f, 60f), new Vector2(1800f, 60f));
-            hint.text = "A / D  move     W / SPACE  jump     MOUSE  swing     HOLD + RELEASE LEFT CLICK  thrust     RIGHT CLICK  blade behind back     R  restart";
+            hint.text = "A / D  move    W / SPACE  jump    Q / E  roll    MOUSE  swing    HOLD SHIFT  thrust    R  restart\nLEFT CLICK  throw sword (no sword: punch)    HOLD RIGHT CLICK  shuriken    walk over sword  pick up";
             hint.color = new Color(1f, 1f, 1f, 0.8f);
             center.gameObject.AddComponent<Outline>().effectDistance = new Vector2(4f, -4f);
             center.GetComponent<Outline>().effectColor = new Color(0.05f, 0.02f, 0.08f, 0.9f);
