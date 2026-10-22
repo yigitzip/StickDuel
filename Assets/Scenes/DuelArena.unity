@@ -163,7 +163,7 @@ MonoBehaviour:
   swingFollowGain: 0.75
   inwardAngleLimit: 60
   outwardAngleLimit: 120
-  restingAngleOffset: 120
+  restingAngleOffset: 105
   backGuardDroop: 30
   backGuardTurnSpeed: 900
   chamberReach: 0.35
@@ -466,7 +466,7 @@ MonoBehaviour:
   swingFollowGain: 0.75
   inwardAngleLimit: 60
   outwardAngleLimit: 120
-  restingAngleOffset: 120
+  restingAngleOffset: 105
   backGuardDroop: 30
   backGuardTurnSpeed: 900
   chamberReach: 0.35

@@ -33,7 +33,7 @@ namespace StickDuel
         [SerializeField, Range(0f, 2f)] private float swingFollowGain = 0.75f;
         [SerializeField, Range(0f, 60f)] private float inwardAngleLimit = 60f;
         [SerializeField, Range(0f, 180f)] private float outwardAngleLimit = 120f;
-        [SerializeField, Range(60f, 120f)] private float restingAngleOffset = 120f;
+        [SerializeField, Range(60f, 120f)] private float restingAngleOffset = 105f;
 
         [Header("Idle Return")]
         [Tooltip("Arm angle changes below this threshold are treated as idle movement rather than a swing.")]
