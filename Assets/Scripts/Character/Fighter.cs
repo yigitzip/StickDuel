@@ -26,7 +26,7 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float moveSpeed = 4.5f;
         [SerializeField, Min(0f)] private float groundAcceleration = 55f;
         [SerializeField, Min(0f)] private float airAcceleration = 22f;
-        [SerializeField, Min(0f)] private float jumpVelocity = 11f;
+        [SerializeField, Min(0f)] private float jumpVelocity = 12f;
         [SerializeField, Min(0f)] private float coyoteTime = 0.1f;
         [SerializeField, Min(0f)] private float jumpBuffer = 0.12f;
         [SerializeField] private float killY = -7f;
@@ -48,6 +48,20 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float punchCooldown = 0.15f;
         [SerializeField, Min(0.1f)] private float punchReach = 0.85f;
         [SerializeField, Min(0.05f)] private float punchRadius = 0.28f;
+
+        [Header("Kick")]
+        [SerializeField, Min(0f)] private float kickDamage = 14f;
+        [Tooltip("Whole move: chamber (knee up), snap out, hold, pull back. Phases are fractions of this.")]
+        [SerializeField, Min(0.05f)] private float kickDuration = 0.46f;
+        [SerializeField, Min(0f)] private float kickCooldown = 0.2f;
+        [SerializeField, Min(0.1f)] private float kickReach = 0.95f;
+        [SerializeField, Min(0.05f)] private float kickRadius = 0.32f;
+        [SerializeField, Min(0f)] private float kickPush = 8f;
+        [SerializeField, Min(0f)] private float kickLift = 3f;
+        [Tooltip("Small step into the kick as the leg snaps out.")]
+        [SerializeField, Min(0f)] private float kickStep = 3f;
+        [Tooltip("Extra stun on a landed kick so the victim visibly reels.")]
+        [SerializeField, Min(0f)] private float kickStagger = 0.35f;
 
         [Header("Health")]
         [SerializeField, Min(1f)] private float maxHealth = 150f;
@@ -90,6 +104,13 @@ namespace StickDuel
         /// <summary>0 (arm in) → 1 (fully extended) → 0 through a punch.</summary>
         public float PunchExtension => punchTimer > 0f ? Mathf.Sin((1f - punchTimer / punchDuration) * Mathf.PI) : 0f;
         public Vector2 PunchDirection { get; private set; } = Vector2.right;
+        // Kick phases, as fractions of kickDuration: chamber → snap → hold (hitbox live) → recover.
+        public const float KickSnapStart = 0.32f;
+        public const float KickHoldStart = 0.42f;
+        public const float KickRecoverStart = 0.7f;
+        /// <summary>0→1 through a kick, -1 when not kicking (drives the leg pose in the rig).</summary>
+        public float KickProgress => kickTimer > 0f ? 1f - kickTimer / kickDuration : -1f;
+        public Vector2 KickDirection { get; private set; } = Vector2.right;
 
         public event Action<Fighter, float> Damaged;
         public event Action<Fighter> Died;
@@ -106,6 +127,9 @@ namespace StickDuel
         private float punchTimer;
         private float punchReadyTime;
         private bool punchLanded;
+        private float kickTimer;
+        private float kickReadyTime;
+        private bool kickLanded;
         private readonly Collider2D[] punchHits = new Collider2D[8];
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -187,7 +211,9 @@ namespace StickDuel
             }
 
             bool wasGrounded = IsGrounded;
-            IsGrounded = Body.IsTouching(groundFilter);
+            // Rising through a one-way platform still touches it; that must not count as landing
+            // (it handed out a second jump mid-air).
+            IsGrounded = Body.IsTouching(groundFilter) && Body.linearVelocity.y <= 0.5f;
             if (IsGrounded && !wasGrounded && Fx.Instance != null)
             {
                 Fx.Instance.Land(Body.position + Vector2.down * HipHeight);
@@ -202,6 +228,7 @@ namespace StickDuel
             lungeTimer -= dt;
             rollTimer -= dt;
             UpdatePunch(dt);
+            UpdateKick(dt);
             bool canAct = ControlsEnabled && staggerTimer <= 0f;
             Vector2 velocity = Body.linearVelocity;
 
@@ -212,7 +239,8 @@ namespace StickDuel
             }
             else if (staggerTimer <= 0f && lungeTimer <= 0f)
             {
-                float target = canAct ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
+                // Kicking plants the standing foot.
+                float target = canAct && kickTimer <= 0f ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
                 float accel = IsGrounded ? groundAcceleration : airAcceleration;
                 velocity.x = Mathf.MoveTowards(velocity.x, target, accel * dt);
             }
@@ -280,12 +308,13 @@ namespace StickDuel
             rollTimer = rollDuration;
             rollReadyTime = Time.time + rollDuration + rollCooldown;
             punchTimer = 0f;
+            kickTimer = 0f;
         }
 
         /// <summary>Unarmed jab towards the aim point.</summary>
         public void Punch()
         {
-            if (!ControlsEnabled || IsDead || staggerTimer > 0f || rollTimer > 0f || Time.time < punchReadyTime)
+            if (!ControlsEnabled || IsDead || staggerTimer > 0f || rollTimer > 0f || kickTimer > 0f || Time.time < punchReadyTime)
             {
                 return;
             }
@@ -311,9 +340,71 @@ namespace StickDuel
                 return;
             }
 
-            Vector2 fist = ShoulderPosition + PunchDirection * punchReach;
+            punchLanded = Strike(ShoulderPosition + PunchDirection * punchReach, punchRadius, punchDamage, PunchDirection, 3f, 1.2f) != null;
+        }
+
+        /// <summary>Front kick straight ahead, a little upward; hits harder and shoves further than a punch.</summary>
+        public void Kick()
+        {
+            if (!ControlsEnabled || IsDead || staggerTimer > 0f || rollTimer > 0f || punchTimer > 0f || Time.time < kickReadyTime)
+            {
+                return;
+            }
+
+            KickDirection = new Vector2(Facing, 0.25f).normalized;
+            kickTimer = kickDuration;
+            kickReadyTime = Time.time + kickDuration + kickCooldown;
+            kickLanded = false;
+        }
+
+        /// <summary>The foot connects once, around full extension.</summary>
+        private void UpdateKick(float dt)
+        {
+            if (kickTimer <= 0f)
+            {
+                return;
+            }
+
+            float before = KickProgress;
+            kickTimer -= dt;
+            float now = kickTimer > 0f ? KickProgress : 1f;
+            if (before < KickSnapStart && now >= KickSnapStart)
+            {
+                if (IsGrounded)
+                {
+                    Body.linearVelocity = new Vector2(Facing * kickStep, Body.linearVelocity.y);
+                }
+
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Swoosh(Body.position, 20f);
+                }
+            }
+
+            // Hitbox is live from mid-snap until the leg starts coming back.
+            if (kickLanded || now < (KickSnapStart + KickHoldStart) * 0.5f || before > KickRecoverStart)
+            {
+                return;
+            }
+
+            Fighter victim = Strike(Body.position + KickDirection * kickReach, kickRadius, kickDamage, KickDirection, kickPush, kickLift);
+            if (victim != null)
+            {
+                kickLanded = true;
+                victim.ApplyStagger(kickStagger);
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Hitstop(0.1f);
+                    Fx.Instance.Shake(0.35f);
+                }
+            }
+        }
+
+        /// <summary>Hits the first other living fighter around <paramref name="point"/> and returns it (null on a miss).</summary>
+        private Fighter Strike(Vector2 point, float radius, float baseDamage, Vector2 direction, float push, float lift)
+        {
             var filter = new ContactFilter2D { useTriggers = true };
-            int count = Physics2D.OverlapCircle(fist, punchRadius, filter, punchHits);
+            int count = Physics2D.OverlapCircle(point, radius, filter, punchHits);
             for (int i = 0; i < count; i++)
             {
                 Rigidbody2D rb = punchHits[i].attachedRigidbody;
@@ -323,22 +414,23 @@ namespace StickDuel
                     continue;
                 }
 
-                punchLanded = true;
                 bool headshot = false;
                 for (int j = 0; j < count; j++)
                 {
                     headshot |= punchHits[j] == victim.headCollider;
                 }
 
-                float damage = headshot ? punchDamage * 1.5f : punchDamage;
-                victim.TakeHit(damage, new Vector2(Mathf.Sign(PunchDirection.x) * 3f, 1.2f), headshot);
+                float damage = headshot ? baseDamage * 1.5f : baseDamage;
+                victim.TakeHit(damage, new Vector2(Mathf.Sign(direction.x) * push, lift), headshot);
                 if (Fx.Instance != null)
                 {
-                    Fx.Instance.Hit(fist, PunchDirection, victim.color, damage, headshot);
+                    Fx.Instance.Hit(point, direction, victim.color, damage, headshot);
                 }
 
-                return;
+                return victim;
             }
+
+            return null;
         }
 
         /// <summary>Locks movement briefly, e.g. after your blade was parried.</summary>
@@ -399,6 +491,7 @@ namespace StickDuel
             lungeTimer = 0f;
             rollTimer = 0f;
             punchTimer = 0f;
+            kickTimer = 0f;
             jumpRequestTime = -1f;
 
             Body.constraints = RigidbodyConstraints2D.FreezeRotation;

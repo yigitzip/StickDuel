@@ -2924,7 +2924,7 @@ MonoBehaviour:
   moveSpeed: 4.5
   groundAcceleration: 55
   airAcceleration: 22
-  jumpVelocity: 11
+  jumpVelocity: 12
   coyoteTime: 0.1
   jumpBuffer: 0.12
   killY: -7
@@ -3751,7 +3751,7 @@ MonoBehaviour:
   moveSpeed: 4.5
   groundAcceleration: 55
   airAcceleration: 22
-  jumpVelocity: 11
+  jumpVelocity: 12
   coyoteTime: 0.1
   jumpBuffer: 0.12
   killY: -7

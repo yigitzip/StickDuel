@@ -37,6 +37,13 @@ namespace StickDuel
 
         public void Shake(float amount) => trauma = Mathf.Min(1f, trauma + amount);
 
+        /// <summary>Keeps the view inside a painted background: never past ±halfWidth, never zoomed out beyond maxSize.</summary>
+        public void SetBounds(float halfWidth, float maxSize)
+        {
+            arenaHalfWidth = halfWidth;
+            this.maxSize = Mathf.Max(minSize, maxSize);
+        }
+
         private void LateUpdate()
         {
             float dt = Time.unscaledDeltaTime;

@@ -390,7 +390,8 @@ namespace StickDuel
             // Spine: lean into motion, away from hits, slightly forward in stance.
             float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
             lean = Mathf.Clamp(Mathf.Lerp(lean, -targetLean, 1f - Mathf.Exp(-10f * dt)), -18f, 18f);
-            Vector2 up = Rotate(Vector2.up, -lean);
+            // Kicking: the torso tips back to counterbalance the raised leg.
+            Vector2 up = Rotate(Vector2.up, -(lean - facing * KickReach(fighter.KickProgress) * 24f));
             Vector2 chest = pelvis + up * Waist + right * 0.02f + flinch * 0.4f + Vector2.up * breathe;
             Vector2 neckBase = chest + Rotate(up, -lean * 0.3f) * Chest + flinch * 0.6f;
 
@@ -436,11 +437,22 @@ namespace StickDuel
 
                 Vector2 air = hipJoint + new Vector2((isFront ? 0.24f : -0.12f) * facing, isFront ? -0.58f : -0.74f);
                 Vector2 ankle = Vector2.Lerp(Vector2.Lerp(idle, walk, walkBlend), air, airBlend);
+                float kick = fighter.KickProgress;
+                if (isFront && kick >= 0f)
+                {
+                    ankle = KickAnkle(kick, ankle, hipJoint, facing);
+                }
                 Vector2 knee = SolveJoint(hipJoint, ref ankle, Thigh, Shin, facing);
 
                 // Toes point forward; they drop while the foot is lifted or in the air.
                 float toeDrop = (lift * walkBlend * 35f + airBlend * 50f) * Mathf.Deg2Rad;
                 Vector2 toe = ankle + new Vector2(Mathf.Cos(toeDrop) * facing, -Mathf.Sin(toeDrop)) * FootLength;
+                if (isFront && kick >= 0f)
+                {
+                    // Foot flexes up so the sole/heel leads the strike.
+                    Vector2 sole = Rotate(fighter.KickDirection, 80f * facing);
+                    toe = Vector2.Lerp(toe, ankle + sole * FootLength, KickReach(kick));
+                }
 
                 bool lifted = lift > 0.05f && walkBlend > 0.3f;
                 if (footLifted[i] && !lifted && grounded && Fx.Instance != null)
@@ -662,6 +674,50 @@ namespace StickDuel
         /// Two-bone IK. Returns the middle joint; clamps <paramref name="end"/> to the reachable range.
         /// <paramref name="bendSide"/> picks which side of the root→end line the joint bends to.
         /// </summary>
+        /// <summary>
+        /// Front-leg ankle through a kick: ease the knee up to the chest (chamber), snap the leg
+        /// straight out fast, hold it there, then ease back to the normal stance.
+        /// </summary>
+        private Vector2 KickAnkle(float progress, Vector2 stance, Vector2 hipJoint, int facing)
+        {
+            Vector2 chamber = hipJoint + new Vector2(0.3f * facing, -0.28f);
+            Vector2 extended = hipJoint + fighter.KickDirection * (Thigh + Shin) * 0.98f;
+            if (progress < Fighter.KickSnapStart)
+            {
+                return Vector2.Lerp(stance, chamber, Mathf.SmoothStep(0f, 1f, progress / Fighter.KickSnapStart));
+            }
+
+            if (progress < Fighter.KickHoldStart)
+            {
+                float t = (progress - Fighter.KickSnapStart) / (Fighter.KickHoldStart - Fighter.KickSnapStart);
+                return Vector2.Lerp(chamber, extended, 1f - (1f - t) * (1f - t) * (1f - t));
+            }
+
+            if (progress < Fighter.KickRecoverStart)
+            {
+                return extended;
+            }
+
+            float back = (progress - Fighter.KickRecoverStart) / (1f - Fighter.KickRecoverStart);
+            return Vector2.Lerp(extended, stance, Mathf.SmoothStep(0f, 1f, back));
+        }
+
+        /// <summary>How far into the kick pose (0→1→0); used for the lean and the foot angle.</summary>
+        private static float KickReach(float progress)
+        {
+            if (progress < 0f)
+            {
+                return 0f;
+            }
+
+            if (progress < Fighter.KickHoldStart)
+            {
+                return Mathf.SmoothStep(0f, 1f, progress / Fighter.KickHoldStart);
+            }
+
+            return progress < Fighter.KickRecoverStart ? 1f : Mathf.SmoothStep(1f, 0f, (progress - Fighter.KickRecoverStart) / (1f - Fighter.KickRecoverStart));
+        }
+
         public static Vector2 SolveJoint(Vector2 root, ref Vector2 end, float upper, float lower, float bendSide)
         {
             Vector2 delta = end - root;

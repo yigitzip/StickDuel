@@ -88,6 +88,9 @@ namespace StickDuel
         private readonly Dictionary<Fighter, float> lastHitTime = new Dictionary<Fighter, float>();
         private Rigidbody2D body;
         private HingeJoint2D gripJoint;
+        // Katana values, captured in Awake so Equip can scale from them.
+        private Sprite defaultSprite;
+        private float defaultDamagePerSpeed, defaultMaxDamage, defaultKnockback, defaultKnockbackPerSpeed, defaultHitCooldown, defaultRecovery;
         private Vector2 hand;
         private Vector2 handVelocity;
         private float previousArmAngle;
@@ -133,6 +136,14 @@ namespace StickDuel
             body.linearDamping = 0.1f;
             body.angularDamping = 0f;
 
+            defaultSprite = GetComponent<SpriteRenderer>().sprite;
+            defaultDamagePerSpeed = damagePerSpeed;
+            defaultMaxDamage = maxDamage;
+            defaultKnockback = baseKnockback;
+            defaultKnockbackPerSpeed = knockbackPerSpeed;
+            defaultHitCooldown = hitCooldown;
+            defaultRecovery = recoveryAfterHit;
+
             gripJoint = GetComponent<HingeJoint2D>();
             if (gripJoint == null)
             {
@@ -153,6 +164,8 @@ namespace StickDuel
                 spinTrail.SetKeys(
                     new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(spinTrailColor, 0.25f), new GradientColorKey(spinTrailColor, 1f) },
                     new[] { new GradientAlphaKey(0.95f, 0f), new GradientAlphaKey(0f, 1f) });
+
+                BladeTrail.Attach(trail, transform);
             }
         }
 
@@ -565,6 +578,28 @@ namespace StickDuel
             {
                 Fx.Instance.Callout(point, "PARRY!");
             }
+        }
+
+        /// <summary>Swaps in another weapon: sprite, reach, hitbox and damage/knockback/pace.</summary>
+        public void Equip(Weapon weapon)
+        {
+            GetComponent<SpriteRenderer>().sprite = weapon.Sprite != null ? weapon.Sprite : defaultSprite;
+            tip.localPosition = new Vector3(weapon.Tip, 0f, 0f);
+            var offset = new Vector2((weapon.BladeStart + weapon.Tip) * 0.5f, weapon.CenterOffset);
+            float length = weapon.Tip - weapon.BladeStart;
+            var blade = GetComponent<BoxCollider2D>();
+            blade.offset = offset;
+            blade.size = new Vector2(length, weapon.Thickness);
+            var edge = (BoxCollider2D)hitCollider;
+            edge.offset = offset;
+            edge.size = new Vector2(length, weapon.Thickness + 0.07f);
+
+            damagePerSpeed = defaultDamagePerSpeed * weapon.Damage;
+            maxDamage = defaultMaxDamage * weapon.Damage;
+            baseKnockback = defaultKnockback * weapon.Knockback;
+            knockbackPerSpeed = defaultKnockbackPerSpeed * weapon.Knockback;
+            hitCooldown = defaultHitCooldown * weapon.HitCooldown;
+            recoveryAfterHit = defaultRecovery * weapon.Recovery;
         }
 
         private void Stagger(float seconds)

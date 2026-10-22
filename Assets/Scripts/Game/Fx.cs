@@ -15,6 +15,7 @@ namespace StickDuel
         [SerializeField] private Material sparkMaterial;
         [SerializeField] private Material glowMaterial;
         [SerializeField] private Material dotMaterial;
+        public Material DotMaterial => dotMaterial;
         [SerializeField] private Material petalMaterial;
 
         [Header("Audio")]
@@ -38,6 +39,11 @@ namespace StickDuel
         private SpriteRenderer screenFlash;
         private float baseFixedDeltaTime;
 
+        [Tooltip("Overall game speed; 1 = original, 0.8 = 20% slower.")]
+        [SerializeField, Range(0.1f, 2f)] private float gameSpeed = 0.8f;
+        [Tooltip("Off mutes every game sound, the background wind included; the clips stay assigned.")]
+        [SerializeField] private bool soundEnabled = false;
+
         /// <summary>Time scale outside of hitstop (used for K.O. slow motion).</summary>
         public float BaseTimeScale { get; set; } = 1f;
 
@@ -45,6 +51,7 @@ namespace StickDuel
         {
             Instance = this;
             baseFixedDeltaTime = Time.fixedDeltaTime;
+            AudioListener.volume = soundEnabled ? 1f : 0f;
             sparks = CreateSystem("Sparks", sparkMaterial, 1.2f, 40, true);
             CollideWithGround(sparks, 0.4f);
             flashes = CreateSystem("Flashes", glowMaterial, 0f, 39, false);
@@ -73,7 +80,7 @@ namespace StickDuel
 
         private void Update()
         {
-            float scale = BaseTimeScale;
+            float scale = BaseTimeScale * gameSpeed;
             if (Time.unscaledTime < slowMotionUntil)
             {
                 scale = Mathf.Min(scale, slowMotionScale);
@@ -99,6 +106,14 @@ namespace StickDuel
             Play(hit, 0.7f + k * 0.3f, Random.Range(0.9f, 1.1f) * (headshot ? 1.15f : 1f));
             Hitstop(0.04f + k * 0.07f);
             Shake(0.25f + k * 0.35f);
+        }
+
+        /// <summary>Ice breaking on the floor: a spray of shards, no hitstop.</summary>
+        public void Shatter(Vector2 point, Color color)
+        {
+            Burst(sparks, point, Vector2.up, 70f, 16, 3f, 8f, 0.05f, 0.12f, color, 0.4f);
+            Burst(dust, point, Vector2.up, 80f, 6, 0.4f, 1.4f, 0.1f, 0.22f, new Color(0.85f, 0.95f, 1f, 0.5f), 0.6f);
+            Shake(0.12f);
         }
 
         public void Clash(Vector2 point, float speed)
@@ -311,7 +326,7 @@ namespace StickDuel
 
         private void Play(AudioClip clip, float volume, float pitch)
         {
-            if (clip == null)
+            if (clip == null || !soundEnabled)
             {
                 return;
             }

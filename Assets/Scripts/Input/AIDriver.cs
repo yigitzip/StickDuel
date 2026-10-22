@@ -25,6 +25,8 @@ namespace StickDuel
         private int flankDirection;
         private Vector2 aimVelocity;
 
+        public float ArenaHalfWidth { set => arenaHalfWidth = value; }
+
         private float ReactionTime => Mathf.Lerp(0.38f, 0.12f, skill);
 
         private void Awake()
@@ -103,7 +105,33 @@ namespace StickDuel
             {
                 self.RequestJump();
             }
+
+            // Never walk off a ledge or into lava; jump the gap when the opponent is across it.
+            if (self.IsGrounded && Mathf.Abs(self.moveInput) > 0.1f)
+            {
+                int direction = self.moveInput > 0f ? 1 : -1;
+                if (!GroundAhead(me, direction))
+                {
+                    if (direction == toward && distance > 1.2f)
+                    {
+                        self.RequestJump();
+                    }
+                    else
+                    {
+                        self.moveInput = 0f;
+                    }
+                }
+            }
         }
+
+        /// <summary>Solid ground about level with our feet under the next step (a pit floor or a lower island does not count).</summary>
+        private static bool GroundAhead(Vector2 hip, int direction)
+        {
+            var filter = new ContactFilter2D { useTriggers = false, useLayerMask = true, layerMask = 1 };
+            return Physics2D.Raycast(hip + new Vector2(direction * 0.9f, 0f), Vector2.down, filter, groundHits, Fighter.HipHeight + 0.5f) > 0;
+        }
+
+        private static readonly RaycastHit2D[] groundHits = new RaycastHit2D[1];
 
         private void UpdateDefense(Fighter opponent, Vector2 shoulder, float dt)
         {

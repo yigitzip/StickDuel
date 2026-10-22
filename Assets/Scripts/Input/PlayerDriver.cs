@@ -6,7 +6,7 @@ namespace StickDuel
     /// <summary>
     /// Keyboard + mouse (or gamepad) → Fighter input. Hold left mouse to charge a shuriken throw;
     /// right click throws the katana at the cursor (or punches when it is gone), and walking over
-    /// the fallen katana picks it back up. Q / E roll left / right.
+    /// the fallen katana picks it back up. Q / E roll left / right, Space kicks.
     /// </summary>
     [RequireComponent(typeof(Fighter))]
     public sealed class PlayerDriver : MonoBehaviour
@@ -87,9 +87,8 @@ namespace StickDuel
             {
                 if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) move -= 1f;
                 if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) move += 1f;
-                jump |= keyboard.wKey.wasPressedThisFrame
-                        || keyboard.spaceKey.wasPressedThisFrame
-                        || keyboard.upArrowKey.wasPressedThisFrame;
+                jump |= keyboard.wKey.wasPressedThisFrame || keyboard.upArrowKey.wasPressedThisFrame;
+                if (keyboard.spaceKey.wasPressedThisFrame) fighter.Kick();
                 thrust |= keyboard.leftShiftKey.isPressed;
                 if (keyboard.qKey.wasPressedThisFrame) fighter.Roll(-1);
                 if (keyboard.eKey.wasPressedThisFrame) fighter.Roll(1);
