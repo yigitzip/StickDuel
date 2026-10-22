@@ -4,8 +4,8 @@ using UnityEngine.InputSystem;
 namespace StickDuel
 {
     /// <summary>
-    /// Keyboard + mouse (or gamepad) → Fighter input. Hold right mouse to charge a shuriken throw;
-    /// left click throws the katana at the cursor (or punches when it is gone), and walking over
+    /// Keyboard + mouse (or gamepad) → Fighter input. Hold left mouse to charge a shuriken throw;
+    /// right click throws the katana at the cursor (or punches when it is gone), and walking over
     /// the fallen katana picks it back up. Q / E roll left / right.
     /// </summary>
     [RequireComponent(typeof(Fighter))]
@@ -113,7 +113,7 @@ namespace StickDuel
             Mouse mouse = Mouse.current;
             if (mouse != null)
             {
-                if (mouse.leftButton.wasPressedThisFrame)
+                if (mouse.rightButton.wasPressedThisFrame)
                 {
                     ThrowSwordOrPunch();
                 }
@@ -169,12 +169,12 @@ namespace StickDuel
                 return;
             }
 
-            if (mouse.rightButton.wasPressedThisFrame && shurikenCount > 0)
+            if (mouse.leftButton.wasPressedThisFrame && shurikenCount > 0)
             {
                 charging = true;
                 chargeTimer = 0f;
             }
-            else if (charging && mouse.rightButton.isPressed)
+            else if (charging && mouse.leftButton.isPressed)
             {
                 chargeTimer = Mathf.Min(chargeTimer + Time.deltaTime, maxChargeTime);
             }

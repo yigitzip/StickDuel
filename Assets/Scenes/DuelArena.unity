@@ -2767,7 +2767,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "A / D  move    W / SPACE  jump    Q / E  roll    MOUSE  swing    HOLD SHIFT  thrust    R  restart\nLEFT CLICK  throw sword (no sword: punch)    HOLD RIGHT CLICK  shuriken    walk over sword  pick up"
+  m_Text: "A / D  move    W / SPACE  jump    Q / E  roll    MOUSE  swing    HOLD SHIFT  thrust    R  restart\nRIGHT CLICK  throw sword (no sword: punch)    HOLD LEFT CLICK  shuriken    walk over sword  pick up"
 --- !u!114 &1262031985
 MonoBehaviour:
   m_ObjectHideFlags: 0
