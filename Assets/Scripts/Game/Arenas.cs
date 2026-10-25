@@ -208,7 +208,7 @@ namespace StickDuel
             Fighter player = duel.Player;
             Fighter enemy = duel.Enemy;
             if (player.sword != null) player.sword.Equip(Weapon.All[selectedWeapon]);
-            if (enemy.sword != null) enemy.sword.Equip(Weapon.All[Random.Range(0, Weapon.All.Length)]);
+            if (enemy.sword != null) enemy.sword.Equip(Weapon.All[0]);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 ai.ArenaHalfWidth = HalfWidth;

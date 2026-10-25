@@ -24,13 +24,13 @@ namespace StickDuel
         [Header("Arm")]
         [SerializeField, Min(0.1f)] private float reach = 0.8f;
         [SerializeField] private float minHandHeight = -0.75f;
-        [SerializeField, Min(0.01f)] private float handSmoothTime = 0.1f;
-        [SerializeField, Min(0f)] private float maxHandSpeed = 12f;
+        [SerializeField, Min(0.01f)] private float handSmoothTime = 0.08f;
+        [SerializeField, Min(0f)] private float maxHandSpeed = 15f;
         [Tooltip("How far the hilt may whip away from the hand before it is pulled back.")]
         [SerializeField, Min(0f)] private float maxGripSlack = 0.12f;
 
         [Header("Direct Arm Follow")]
-        [SerializeField, Range(0f, 2f)] private float swingFollowGain = 0.75f;
+        [SerializeField, Range(0f, 2f)] private float swingFollowGain = 0.82f;
         [SerializeField, Range(0f, 60f)] private float inwardAngleLimit = 60f;
         [SerializeField, Range(0f, 180f)] private float outwardAngleLimit = 120f;
         [SerializeField, Range(60f, 120f)] private float restingAngleOffset = 105f;

@@ -22,6 +22,7 @@
   <Project Path="Unity.Rider.Editor.csproj" />
   <Project Path="Unity.InternalAPIEditorBridge.001.csproj" />
   <Project Path="Unity.2D.SpriteShape.Runtime.csproj" />
+  <Project Path="StickDuel.csproj" />
   <Project Path="Unity.VisualScripting.State.Editor.csproj" />
   <Project Path="ScriptablePacker.csproj" />
   <Project Path="Unity.Burst.CodeGen.csproj" />
@@ -39,7 +40,6 @@
   <Project Path="Unity.2D.Tilemap.Extras.csproj" />
   <Project Path="Unity.2D.PixelPerfect.csproj" />
   <Project Path="Unity.PlasticSCM.Editor.Assistant.csproj" />
-  <Project Path="StickDuel.csproj" />
   <Project Path="Unity.2D.PixelPerfect.Editor.csproj" />
   <Project Path="Unity.InputSystem.DocCodeSamples.csproj" />
   <Project Path="Unity.2D.Common.Runtime.csproj" />

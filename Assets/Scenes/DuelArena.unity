@@ -157,10 +157,10 @@ MonoBehaviour:
   trail: {fileID: 1324645455}
   reach: 0.8
   minHandHeight: -0.75
-  handSmoothTime: 0.1
-  maxHandSpeed: 12
+  handSmoothTime: 0.08
+  maxHandSpeed: 15
   maxGripSlack: 0.12
-  swingFollowGain: 0.75
+  swingFollowGain: 0.82
   inwardAngleLimit: 60
   outwardAngleLimit: 120
   restingAngleOffset: 105
@@ -460,10 +460,10 @@ MonoBehaviour:
   trail: {fileID: 981771160}
   reach: 0.8
   minHandHeight: -0.75
-  handSmoothTime: 0.1
-  maxHandSpeed: 12
+  handSmoothTime: 0.08
+  maxHandSpeed: 15
   maxGripSlack: 0.12
-  swingFollowGain: 0.75
+  swingFollowGain: 0.82
   inwardAngleLimit: 60
   outwardAngleLimit: 120
   restingAngleOffset: 105
