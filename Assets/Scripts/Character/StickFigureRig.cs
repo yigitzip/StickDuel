@@ -416,10 +416,16 @@ namespace StickDuel
         {
             Vector2 right = new Vector2(facing, 0f);
             float groundY = hip.y - Fighter.HipHeight;
+            float slope = 0f;
             RaycastHit2D groundHit = Physics2D.Raycast(hip, Vector2.down, 2.5f, groundMask);
-            if (groundHit.collider != null)
+            // Ignore a surface above our feet (the underside of a castle stair we are walking beneath).
+            if (groundHit.collider != null && groundHit.point.y <= groundY + 0.35f)
             {
                 groundY = groundHit.point.y;
+                if (groundHit.normal.y > 0.1f)
+                {
+                    slope = -groundHit.normal.x / groundHit.normal.y; // feet step up or down the stairs
+                }
             }
 
             float moveDir = Mathf.Abs(velocity.x) > 0.05f ? Mathf.Sign(velocity.x) : facing;
@@ -430,10 +436,12 @@ namespace StickDuel
 
                 // Fencing stance: lead foot forward, rear foot back and turned.
                 Vector2 idle = new Vector2(hip.x + (isFront ? 0.22f : -0.17f) * facing, groundY + AnkleHeight);
+                idle.y += (idle.x - hip.x) * slope;
 
                 float phase = gaitPhase + i * Mathf.PI;
                 float lift = Mathf.Max(0f, -Mathf.Sin(phase));
                 Vector2 walk = new Vector2(hip.x + Mathf.Cos(phase) * strideLength * 0.5f * moveDir, groundY + AnkleHeight + lift * 0.2f);
+                walk.y += (walk.x - hip.x) * slope;
 
                 Vector2 air = hipJoint + new Vector2((isFront ? 0.24f : -0.12f) * facing, isFront ? -0.58f : -0.74f);
                 Vector2 ankle = Vector2.Lerp(Vector2.Lerp(idle, walk, walkBlend), air, airBlend);

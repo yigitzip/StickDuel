@@ -117,7 +117,8 @@ namespace StickDuel
         private bool flying; // thrown and not yet landed: the edge still cuts
         private bool wasRolling;
 
-        public Fighter Owner => owner;
+        /// <summary>Settable so a cloned fighter (castle guard) can take its cloned blade.</summary>
+        public Fighter Owner { get => owner; set => owner = value; }
         public bool IsHeld { get; private set; } = true;
         /// <summary>Thrown and not yet landed.</summary>
         public bool IsFlying => flying;
@@ -463,7 +464,7 @@ namespace StickDuel
             }
 
             Fighter victim = other.attachedRigidbody.GetComponent<Fighter>();
-            if (victim == null || victim == owner || victim.IsDead || victim.IsRolling)
+            if (victim == null || victim == owner || victim.IsDead || victim.IsRolling || (victim.isGuard && owner.isGuard))
             {
                 return;
             }
@@ -507,6 +508,8 @@ namespace StickDuel
             {
                 damage *= spinDamageMultiplier;
             }
+
+            damage *= owner.damageScale;
 
             Vector2 direction = relative.normalized;
             // Push away from the attacker, mostly sideways, never a launch.

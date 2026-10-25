@@ -24,8 +24,11 @@ namespace StickDuel
         private float flankTimer;
         private int flankDirection;
         private Vector2 aimVelocity;
+        private float minX;
+        private float maxX;
 
-        public float ArenaHalfWidth { set => arenaHalfWidth = value; }
+        public float ArenaHalfWidth { set => SetBounds(-value, value); }
+        public float Skill { get => skill; set => skill = Mathf.Clamp01(value); }
 
         private float ReactionTime => Mathf.Lerp(0.38f, 0.12f, skill);
 
@@ -33,6 +36,14 @@ namespace StickDuel
         {
             self = GetComponent<Fighter>();
             modeTimer = 1f;
+            SetBounds(-arenaHalfWidth, arenaHalfWidth);
+        }
+
+        /// <summary>The stretch of floor the bot fights on (a castle room, or the whole arena).</summary>
+        public void SetBounds(float left, float right)
+        {
+            minX = left;
+            maxX = right;
         }
 
         private void Update()
@@ -192,7 +203,7 @@ namespace StickDuel
         private bool CanFlank()
         {
             float landing = self.opponent.Body.position.x + self.Facing * 1.5f;
-            return Mathf.Abs(landing) < arenaHalfWidth - 1.5f;
+            return landing > minX + 1.5f && landing < maxX - 1.5f;
         }
 
         private void SetMode(Mode next, float duration)
@@ -222,9 +233,13 @@ namespace StickDuel
             }
 
             // Never back off the cliff.
-            if (Mathf.Abs(x) > arenaHalfWidth - 1.5f && Mathf.Sign(move) == Mathf.Sign(x))
+            if (x < minX + 1.5f && move <= 0f)
             {
-                move = -Mathf.Sign(x) * 0.5f;
+                move = 0.5f;
+            }
+            else if (x > maxX - 1.5f && move >= 0f)
+            {
+                move = -0.5f;
             }
 
             return move;

@@ -84,10 +84,15 @@ namespace StickDuel
         [NonSerialized] public bool backGuard;
         /// <summary>Hold to chamber a thrust, release to stab.</summary>
         [NonSerialized] public bool thrustHeld;
+        /// <summary>Multiplies every hit this fighter lands (Survival weakens its bots).</summary>
+        [NonSerialized] public float damageScale = 1f;
+        /// <summary>Castle guards: their blades pass through each other's bodies.</summary>
+        [NonSerialized] public bool isGuard;
 
         public bool ControlsEnabled { get; set; } = true;
         public float Health { get; private set; }
-        public float MaxHealth => maxHealth;
+        /// <summary>Takes effect on the next ResetFighter.</summary>
+        public float MaxHealth { get => maxHealth; set => maxHealth = Mathf.Max(1f, value); }
         public float Stamina { get; private set; }
         public float MaxStamina => maxStamina;
         public bool IsDead { get; private set; }
@@ -131,6 +136,7 @@ namespace StickDuel
         private float kickReadyTime;
         private bool kickLanded;
         private readonly Collider2D[] punchHits = new Collider2D[8];
+        private readonly ContactPoint2D[] groundContacts = new ContactPoint2D[4];
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void ConfigureLayerCollisions()
@@ -213,7 +219,7 @@ namespace StickDuel
             bool wasGrounded = IsGrounded;
             // Rising through a one-way platform still touches it; that must not count as landing
             // (it handed out a second jump mid-air).
-            IsGrounded = Body.IsTouching(groundFilter) && Body.linearVelocity.y <= 0.5f;
+            IsGrounded = Body.IsTouching(groundFilter) && Body.linearVelocity.y <= 0.5f + SlopeRise();
             if (IsGrounded && !wasGrounded && Fx.Instance != null)
             {
                 Fx.Instance.Land(Body.position + Vector2.down * HipHeight);
@@ -259,6 +265,26 @@ namespace StickDuel
             velocity.x = Mathf.Clamp(velocity.x, -maxSpeed, maxSpeed);
             velocity.y = Mathf.Min(velocity.y, jumpVelocity * 1.1f);
             Body.linearVelocity = velocity;
+        }
+
+        /// <summary>
+        /// Upward speed that walking up the slope under us explains (castle stairs). Zero on flat
+        /// ground and one-way ledges, so rising through a ledge still is not a landing.
+        /// </summary>
+        private float SlopeRise()
+        {
+            float rise = 0f;
+            int count = Body.GetContacts(groundFilter, groundContacts);
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 n = groundContacts[i].normal;
+                if (n.y > 0.1f)
+                {
+                    rise = Mathf.Max(rise, Mathf.Abs(Body.linearVelocity.x * n.x / n.y));
+                }
+            }
+
+            return rise;
         }
 
         /// <summary>Spends stamina if there is enough; returns false (and spends nothing) otherwise.</summary>
@@ -420,7 +446,7 @@ namespace StickDuel
                     headshot |= punchHits[j] == victim.headCollider;
                 }
 
-                float damage = headshot ? baseDamage * 1.5f : baseDamage;
+                float damage = (headshot ? baseDamage * 1.5f : baseDamage) * damageScale;
                 victim.TakeHit(damage, new Vector2(Mathf.Sign(direction.x) * push, lift), headshot);
                 if (Fx.Instance != null)
                 {
@@ -478,6 +504,8 @@ namespace StickDuel
 
             Died?.Invoke(this);
         }
+
+        public void RestoreHealth() => Health = maxHealth;
 
         public void ResetFighter(Vector2 position)
         {

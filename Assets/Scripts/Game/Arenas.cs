@@ -100,6 +100,8 @@ namespace StickDuel
         private Sprite shadowSprite;
         private readonly List<Outline> weaponOutlines = new List<Outline>();
         private readonly List<Outline> mapOutlines = new List<Outline>();
+        private readonly List<Outline> modeOutlines = new List<Outline>();
+        private bool survival; // per scene load: Esc always comes back to Duel
 
         public static Arenas Instance { get; private set; }
 
@@ -195,6 +197,13 @@ namespace StickDuel
             Fight();
         }
 
+        /// <summary>Skips the menu straight into Survival (used by the editor test bridge).</summary>
+        public void StartSurvival()
+        {
+            SelectMode(true);
+            Fight();
+        }
+
         private void Fight()
         {
             if (menu == null)
@@ -204,17 +213,27 @@ namespace StickDuel
 
             Destroy(menu);
             menu = null;
-            Build(All[selectedMap]);
+            CastleLevel castle = survival ? BuildCastle() : null;
+            if (!survival)
+            {
+                Build(All[selectedMap]);
+            }
+
             Fighter player = duel.Player;
             Fighter enemy = duel.Enemy;
-            if (player.sword != null) player.sword.Equip(Weapon.All[selectedWeapon]);
+            if (player.sword != null) player.sword.Equip(Weapon.All[survival ? 0 : selectedWeapon]);
             if (enemy.sword != null) enemy.sword.Equip(Weapon.All[0]);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 ai.ArenaHalfWidth = HalfWidth;
             }
 
-            duel.enabled = true; // its Start kicks off the match
+            if (survival && duel.GetComponent<SurvivalMode>() == null)
+            {
+                duel.gameObject.AddComponent<SurvivalMode>().Init(duel, castle);
+            }
+
+            duel.enabled = true; // its Start kicks off the match (or just the HUD, in Survival)
         }
 
         private static void SetControls(bool enabled)
@@ -244,14 +263,7 @@ namespace StickDuel
 
             if (cam != null)
             {
-                // The scene's sky and drifting petals belong to the old shrine; each arena brings its own motes.
-                foreach (string child in new[] { "Sky", "Petals" })
-                {
-                    Transform t = cam.transform.Find(child);
-                    if (t != null) t.gameObject.SetActive(false);
-                }
-
-                cam.backgroundColor = Color.black;
+                HideSceneSky();
                 // Never show past the painting's padding, sideways or by zooming out.
                 float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit;
                 cam.GetComponent<CameraRig>().SetBounds(halfView, halfView / Mathf.Max(cam.aspect, 0.5f));
@@ -295,6 +307,31 @@ namespace StickDuel
             {
                 BuildLavaSea(root, arena);
             }
+        }
+
+        /// <summary>The Survival castle (graybox), in place of a painted arena.</summary>
+        private CastleLevel BuildCastle()
+        {
+            environment.SetActive(false);
+            HideSceneSky();
+            return CastleLevel.Build(glowMaterial);
+        }
+
+        // The scene's sky and drifting petals belong to the old shrine; each arena brings its own motes.
+        private void HideSceneSky()
+        {
+            if (cam == null)
+            {
+                return;
+            }
+
+            foreach (string child in new[] { "Sky", "Petals" })
+            {
+                Transform t = cam.transform.Find(child);
+                if (t != null) t.gameObject.SetActive(false);
+            }
+
+            cam.backgroundColor = Color.black;
         }
 
         // Volcano layout, in painting rows (see Tools/prepare_backgrounds.py).
@@ -546,8 +583,24 @@ namespace StickDuel
             UiText(fight.transform, font, "FIGHT!", 46, Vector2.zero, Color.white);
             UiText(menu.transform, font, "Enter to fight      Esc in game returns here", 22, new Vector2(0f, -490f), new Color(1f, 1f, 1f, 0.5f));
 
+            for (int i = 0; i < 2; i++)
+            {
+                bool isSurvival = i == 1;
+                Image card = Card(isSurvival ? "Survival" : "Duel", new Vector2(isSurvival ? 450f : -450f, -410f), new Vector2(300f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(isSurvival));
+                UiText(card.transform, font, isSurvival ? "SURVIVAL" : "DUEL", 34, new Vector2(0f, 12f), Color.white);
+                UiText(card.transform, font, isSurvival ? "Storm the castle, take the crown" : "Best of five", 18, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f));
+                modeOutlines.Add(card.GetComponent<Outline>());
+            }
+
             SelectWeapon(selectedWeapon);
             SelectMap(selectedMap);
+            SelectMode(survival);
+        }
+
+        private void SelectMode(bool isSurvival)
+        {
+            survival = isSurvival;
+            Highlight(modeOutlines, isSurvival ? 1 : 0);
         }
 
         private void SelectWeapon(int index)

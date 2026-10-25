@@ -24,9 +24,17 @@ namespace StickDuel
         private float trauma;
         private float size;
         private float zoomPunch;
+        private float minX = -15f;
+        private float maxX = 15f;
+
+        public Fighter[] Targets { set => targets = value; }
+        /// <summary>Lowest the camera centre goes (the castle raises it to the current floor).</summary>
+        public float MinY { set => minY = value; }
 
         private void Awake()
         {
+            minX = -arenaHalfWidth;
+            maxX = arenaHalfWidth;
             cam = GetComponent<Camera>();
             basePosition = transform.position;
             size = cam.orthographicSize;
@@ -38,9 +46,13 @@ namespace StickDuel
         public void Shake(float amount) => trauma = Mathf.Min(1f, trauma + amount);
 
         /// <summary>Keeps the view inside a painted background: never past ±halfWidth, never zoomed out beyond maxSize.</summary>
-        public void SetBounds(float halfWidth, float maxSize)
+        public void SetBounds(float halfWidth, float maxSize) => SetBounds(-halfWidth, halfWidth, maxSize);
+
+        /// <summary>Same, for a level that is not centred on x = 0 (the castle).</summary>
+        public void SetBounds(float left, float right, float maxSize)
         {
-            arenaHalfWidth = halfWidth;
+            minX = left;
+            maxX = right;
             this.maxSize = Mathf.Max(minSize, maxSize);
         }
 
@@ -68,6 +80,7 @@ namespace StickDuel
             float minX = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
             foreach (Fighter fighter in targets)
             {
+                if (fighter == null) continue; // a castle guard that was just cleared away
                 Vector2 p = fighter.transform.position;
                 minX = Mathf.Min(minX, p.x);
                 maxX = Mathf.Max(maxX, p.x);
@@ -79,9 +92,10 @@ namespace StickDuel
             size = Mathf.SmoothDamp(size, targetSize, ref sizeVelocity, smoothTime, Mathf.Infinity, dt);
 
             float halfWidth = size * aspect;
-            float limit = Mathf.Max(0f, arenaHalfWidth - halfWidth);
+            float left = this.minX + halfWidth, right = this.maxX - halfWidth;
+            float centre = (minX + maxX) * 0.5f;
             Vector3 target = new Vector3(
-                Mathf.Clamp((minX + maxX) * 0.5f, -limit, limit),
+                left < right ? Mathf.Clamp(centre, left, right) : (this.minX + this.maxX) * 0.5f,
                 Mathf.Max(minY, maxY + heightOffset - size * 0.4f),
                 basePosition.z);
             basePosition = Vector3.SmoothDamp(basePosition, target, ref velocity, smoothTime, Mathf.Infinity, dt);

@@ -46,6 +46,8 @@ namespace StickDuel
 
         /// <summary>Time scale outside of hitstop (used for K.O. slow motion).</summary>
         public float BaseTimeScale { get; set; } = 1f;
+        /// <summary>On = no hitstop, no slow motion and no floating words (the castle keeps flowing).</summary>
+        public bool Calm { get; set; }
 
         private void Awake()
         {
@@ -184,6 +186,7 @@ namespace StickDuel
         /// <summary>Slows the game to <paramref name="scale"/> for <paramref name="seconds"/> of real time.</summary>
         public void SlowMotion(float scale, float seconds)
         {
+            if (Calm) return;
             slowMotionScale = scale;
             slowMotionUntil = Mathf.Max(slowMotionUntil, Time.unscaledTime + seconds);
         }
@@ -252,6 +255,7 @@ namespace StickDuel
 
         public void Callout(Vector2 position, string text, Color color, float size)
         {
+            if (Calm) return;
             StartCoroutine(CalloutRoutine(position, text, color, size));
         }
 
@@ -311,6 +315,7 @@ namespace StickDuel
 
         public void Hitstop(float seconds)
         {
+            if (Calm) return;
             hitstopUntil = Mathf.Max(hitstopUntil, Time.unscaledTime + seconds);
         }
 

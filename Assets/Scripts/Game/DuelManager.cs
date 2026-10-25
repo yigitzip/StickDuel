@@ -46,6 +46,8 @@ namespace StickDuel
         public int EnemyScore => enemyScore;
         public Fighter Player => player;
         public Fighter Enemy => enemy;
+        /// <summary>Off = another mode (SurvivalMode) runs the flow; the HUD bars still update.</summary>
+        public bool RunMatch { get; set; } = true;
 
         private void Start()
         {
@@ -69,7 +71,10 @@ namespace StickDuel
                 shurikenIcons = CreateShurikenIcons(playerFill, playerThrower.MaxShuriken);
             }
 
-            flow = StartCoroutine(Match());
+            if (RunMatch)
+            {
+                flow = StartCoroutine(Match());
+            }
         }
 
         /// <summary>Builds a thin stamina bar under a health bar by cloning the health bar's frame.</summary>
@@ -176,7 +181,7 @@ namespace StickDuel
             }
 
             Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+            if (RunMatch && keyboard != null && keyboard.rKey.wasPressedThisFrame)
             {
                 Restart();
             }
@@ -269,7 +274,7 @@ namespace StickDuel
             Hide();
         }
 
-        private void ResetFighters()
+        public void ResetFighters()
         {
             player.ResetFighter(playerSpawn);
             enemy.ResetFighter(enemySpawn);
@@ -281,13 +286,13 @@ namespace StickDuel
             playerLagValue = enemyLagValue = 1f;
         }
 
-        private void SetControls(bool enabled)
+        public void SetControls(bool enabled)
         {
             player.ControlsEnabled = enabled;
             enemy.ControlsEnabled = enabled;
         }
 
-        private void Show(string title, string subtitle, Color color)
+        public void Show(string title, string subtitle, Color color)
         {
             centerText.text = title;
             centerText.color = color;
@@ -297,10 +302,25 @@ namespace StickDuel
             subText.enabled = !string.IsNullOrEmpty(subtitle);
         }
 
-        private void Hide()
+        public void Hide()
         {
             centerText.enabled = false;
             subText.enabled = false;
+        }
+
+        /// <summary>Survival has no rounds: the pips go and the enemy's name slot shows the run instead.</summary>
+        public void ShowSurvivalLabel(string label)
+        {
+            foreach (Image pip in playerPips) pip.enabled = false;
+            foreach (Image pip in enemyPips) pip.enabled = false;
+            enemyName.text = label;
+        }
+
+        /// <summary>Survival bots fight without a health or stamina bar.</summary>
+        public void HideEnemyBars()
+        {
+            enemyFill.parent.gameObject.SetActive(false);
+            enemyStamina.parent.gameObject.SetActive(false);
         }
 
         private void UpdatePips()
