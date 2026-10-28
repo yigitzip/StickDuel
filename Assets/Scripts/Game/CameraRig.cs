@@ -26,10 +26,20 @@ namespace StickDuel
         private float zoomPunch;
         private float minX = -15f;
         private float maxX = 15f;
+        private Fighter fixedFollowTarget;
+        private float fixedFollowSize;
 
         public Fighter[] Targets { set => targets = value; }
         /// <summary>Lowest the camera centre goes (the castle raises it to the current floor).</summary>
         public float MinY { set => minY = value; }
+
+        /// <summary>Follows one target at the starting zoom without framing or zooming other fighters.</summary>
+        public void SetFixedFollow(Fighter target)
+        {
+            fixedFollowTarget = target;
+            fixedFollowSize = cam != null ? cam.orthographicSize : fixedFollowSize;
+            zoomPunch = 0f;
+        }
 
         private void Awake()
         {
@@ -59,13 +69,17 @@ namespace StickDuel
         private void LateUpdate()
         {
             float dt = Time.unscaledDeltaTime;
-            if (targets != null && targets.Length > 0)
+            if (fixedFollowTarget != null)
+            {
+                FollowFixedTarget(dt);
+            }
+            else if (targets != null && targets.Length > 0)
             {
                 Frame(dt);
             }
 
             zoomPunch = Mathf.MoveTowards(zoomPunch, 0f, dt * (0.6f + zoomPunch * 4f));
-            cam.orthographicSize = size - zoomPunch;
+            cam.orthographicSize = fixedFollowTarget != null ? fixedFollowSize : size - zoomPunch;
 
             trauma = Mathf.Max(0f, trauma - dt * 1.8f);
             float shake = trauma * trauma;
@@ -73,6 +87,20 @@ namespace StickDuel
             Vector3 offset = new Vector3(Mathf.PerlinNoise(t, 0.3f) - 0.5f, Mathf.PerlinNoise(0.7f, t) - 0.5f, 0f) * 2f * maxShakeOffset * shake;
             float angle = (Mathf.PerlinNoise(t, t * 0.5f) - 0.5f) * 2f * maxShakeAngle * shake;
             transform.SetPositionAndRotation(basePosition + offset, Quaternion.Euler(0f, 0f, angle));
+        }
+
+        private void FollowFixedTarget(float dt)
+        {
+            size = fixedFollowSize;
+            float aspect = Mathf.Max(cam.aspect, 0.5f);
+            float halfWidth = fixedFollowSize * aspect;
+            float left = minX + halfWidth, right = maxX - halfWidth;
+            float centre = fixedFollowTarget.Body.position.x;
+            Vector3 target = new Vector3(
+                left < right ? Mathf.Clamp(centre, left, right) : (minX + maxX) * 0.5f,
+                Mathf.Max(minY, fixedFollowTarget.transform.position.y + heightOffset - fixedFollowSize * 0.4f),
+                basePosition.z);
+            basePosition = Vector3.SmoothDamp(basePosition, target, ref velocity, smoothTime, Mathf.Infinity, dt);
         }
 
         private void Frame(float dt)

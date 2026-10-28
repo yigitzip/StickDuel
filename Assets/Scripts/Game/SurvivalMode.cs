@@ -17,6 +17,9 @@ namespace StickDuel
     {
         private const float CorpseLifetime = 3f;
         private const float CrownReach = 1.2f;
+        private const float SpawnOutsideDistance = 8f;
+        private const float SpawnSpacing = 1.6f;
+        private const int MinimumGuardsPerRoom = 3;
 
         private DuelManager duel;
         private CastleLevel castle;
@@ -27,6 +30,7 @@ namespace StickDuel
         private int cleared;         // rooms cleared so far (they are cleared in order)
         private int active = -1;     // room whose guards are out, -1 between rooms
         private int checkpoint = -1; // last room entered, -1 = still at the start
+        private int spawnedInRoom;
         private int kills;
         private float startTime;
         private bool running;
@@ -56,6 +60,7 @@ namespace StickDuel
 
             cameraRig = Camera.main.GetComponent<CameraRig>();
             cameraRig.SetBounds(0f, CastleLevel.Width, 5f);
+            cameraRig.SetFixedFollow(duel.Player);
             if (Fx.Instance != null) Fx.Instance.Calm = true; // Fx lives in the scene: a reload resets it
         }
 
@@ -78,15 +83,12 @@ namespace StickDuel
 
             Fighter player = duel.Player;
             ClearGuards();
-            foreach (CastleLevel.Room room in castle.Rooms)
-            {
-                if (room.Gate != null) room.Gate.SetActive(true);
-            }
 
             castle.CrownObject.SetActive(false);
             cleared = 0;
             active = -1;
             checkpoint = -1;
+            spawnedInRoom = 0;
             kills = 0;
             over = won = false;
             player.opponent = null;
@@ -148,16 +150,24 @@ namespace StickDuel
 
             if (active >= 0 && guards.Count == 0)
             {
-                CastleLevel.Room room = castle.Rooms[active];
-                if (room.Gate != null) room.Gate.SetActive(false);
-                cleared++;
-                active = -1;
-                castle.CrownObject.SetActive(cleared == castle.Rooms.Length);
+                CastleLevel.Room room = castle.Rooms[checkpoint];
+                if (spawnedInRoom == Mathf.Max(MinimumGuardsPerRoom, room.Guards.Length))
+                {
+                    cleared++;
+                    active = -1;
+                    castle.CrownObject.SetActive(checkpoint == castle.Rooms.Length - 1);
+                }
             }
 
-            if (active < 0 && cleared < castle.Rooms.Length && castle.Rooms[cleared].Contains(feet))
+            if (active >= 0)
             {
-                Enter(cleared);
+                changed |= SpawnPendingGuards(castle.Rooms[checkpoint], feet);
+            }
+
+            int nextRoom = checkpoint + 1;
+            if (nextRoom < castle.Rooms.Length && castle.Rooms[nextRoom].HasPassedEntry(feet))
+            {
+                Enter(nextRoom);
                 changed = true;
             }
 
@@ -168,7 +178,8 @@ namespace StickDuel
             }
 
             player.opponent = Nearest(player);
-            if (cleared == castle.Rooms.Length && Vector2.Distance(player.Body.position, castle.Crown) < CrownReach)
+            if (checkpoint == castle.Rooms.Length - 1 && guards.Count == 0
+                && Vector2.Distance(player.Body.position, castle.Crown) < CrownReach)
             {
                 Win();
             }
@@ -185,11 +196,36 @@ namespace StickDuel
 
             active = index;
             checkpoint = index;
-            for (int i = 0; i < room.Guards.Length; i++)
+            spawnedInRoom = 0;
+            SpawnPendingGuards(room, player.Body.position + Vector2.down * Fighter.HipHeight);
+        }
+
+        private bool SpawnPendingGuards(CastleLevel.Room room, Vector2 feet)
+        {
+            bool spawned = false;
+            int spawnCount = Mathf.Max(MinimumGuardsPerRoom, room.Guards.Length);
+            while (spawnedInRoom < spawnCount)
             {
-                float x = Mathf.Clamp(player.Body.position.x + room.Direction * (6f + i * 1.6f), room.Left + 1f, room.Right - 1f);
-                guards.Add(Spawn(room.Guards[i], new Vector2(x, room.FloorY + Fighter.HipHeight + 0.05f), room));
+                float progress = spawnCount <= 1
+                    ? 0f
+                    : CastleLevel.RoomLength * spawnedInRoom / (float)spawnCount;
+                if (progress > 0f && !room.HasPassedProgress(feet, progress))
+                {
+                    break;
+                }
+
+                int i = spawnedInRoom++;
+                bool spawnAhead = i % 2 == 0;
+                float offset = (i / 2) * SpawnSpacing;
+                float x = spawnAhead
+                    ? room.Entry + room.Direction * (CastleLevel.RoomLength + SpawnOutsideDistance + offset)
+                    : feet.x - room.Direction * (SpawnOutsideDistance + offset);
+                char tier = i < room.Guards.Length ? room.Guards[i] : 'n';
+                guards.Add(Spawn(tier, new Vector2(x, room.FloorY + Fighter.HipHeight + 0.05f), room));
+                spawned = true;
             }
+
+            return spawned;
         }
 
         /// <summary>Clones the template enemy as a guard of <paramref name="room"/>.</summary>
@@ -230,7 +266,7 @@ namespace StickDuel
 
             guard.gameObject.SetActive(true);
             sword.gameObject.SetActive(true);
-            ai.SetBounds(room.Left, room.Right); // after Awake, which sets the scene's arena bounds
+            ai.SetBounds(0f, CastleLevel.Width); // guards can follow the player across former room boundaries
             guard.ResetFighter(position);
             guard.ControlsEnabled = true;
             return guard;
@@ -263,6 +299,7 @@ namespace StickDuel
             StopAllCoroutines();
             ClearGuards();
             active = -1;
+            spawnedInRoom = 0;
             over = false;
             duel.Hide();
             Respawn(checkpoint < 0 ? castle.Start : CheckpointOf(castle.Rooms[checkpoint]));

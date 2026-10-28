@@ -23,7 +23,6 @@ namespace StickDuel
             public int Floor;
             public int Slot;     // 0..3 from the left
             public string Guards;
-            public GameObject Gate;
 
             public int Direction => Floor == 1 ? -1 : 1; // the middle floor runs right to left
             public float Left => Tower + Slot * RoomLength;
@@ -31,6 +30,10 @@ namespace StickDuel
             public float FloorY => Floor * FloorHeight;
             public float Entry => Direction > 0 ? Left : Right;
             public bool Contains(Vector2 feet) => feet.x >= Left && feet.x <= Right && FloorOf(feet.y) == Floor;
+            public bool HasPassedEntry(Vector2 feet) =>
+                FloorOf(feet.y) == Floor && (Direction > 0 ? feet.x >= Entry : feet.x <= Entry);
+            public bool HasPassedProgress(Vector2 feet, float distance) =>
+                FloorOf(feet.y) == Floor && (feet.x - Entry) * Direction >= distance;
         }
 
         // ponytail: room list as data; tune guard counts here after timing a run (target 5-6 minutes).
@@ -88,25 +91,11 @@ namespace StickDuel
             Solid(root, "Roof", 0f, Width, h * 3f, Slab);
             Solid(root, "WallL", -1f, 0f, h * 3f + 1f, h * 3f + 1f);
             Solid(root, "WallR", Width, Width + 1f, h * 3f + 1f, h * 3f + 1f);
-            Solid(root, "ThroneWall", roomsRight, roomsRight + 0.6f, h * 3f, h); // the right tower ends at floor 2
+            Solid(root, "ThroneWall", Width - 0.6f, Width, h * 3f, h); // the throne room ends at the far side of the right tower
 
             // Stairs: one-way ramps, so you can walk underneath them to the far end and turn back up.
             Ramp(root, new Vector2(Width - 1f, 0f), new Vector2(roomsRight, h));
             Ramp(root, new Vector2(1f, h), new Vector2(Tower, h * 2f));
-
-            foreach (Room room in level.Rooms)
-            {
-                if (room.Guards.Contains("b"))
-                {
-                    continue; // the throne room ends the castle: no gate, the crown instead
-                }
-
-                // Portcullis in a stone arch; drops away when the room is cleared.
-                float x = room.Direction > 0 ? room.Right : room.Left;
-                Quad(root, "GateArch", new Vector2(x - 0.6f, room.FloorY), new Vector2(1.2f, h - Slab), new Color(0.2f, 0.17f, 0.24f), 4, block);
-                room.Gate = Quad(root, "Portcullis", new Vector2(x - 0.4f, room.FloorY), new Vector2(0.8f, h - Slab), new Color(0.55f, 0.5f, 0.48f), 6, bars);
-                AddBox(room.Gate, new Vector2(0.8f, h - Slab));
-            }
 
             // Throne room: red carpet up to the throne, the crown on its seat.
             float y3 = h * 2f;
