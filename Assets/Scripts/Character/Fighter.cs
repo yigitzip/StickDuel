@@ -16,6 +16,7 @@ namespace StickDuel
         public const string SwordHitLayer = "SwordHit";
         public const float HipHeight = 0.95f;
         public const float ShoulderHeight = 0.64f;
+        private const float CorpseHorizontalDeceleration = 4f;
 
         [Header("Identity")]
         public string displayName = "Fighter";
@@ -201,6 +202,13 @@ namespace StickDuel
         {
             if (IsDead)
             {
+                if (Body.IsTouching(groundFilter))
+                {
+                    Vector2 corpseVelocity = Body.linearVelocity;
+                    corpseVelocity.x = Mathf.MoveTowards(corpseVelocity.x, 0f, CorpseHorizontalDeceleration * Time.fixedDeltaTime);
+                    Body.linearVelocity = corpseVelocity;
+                }
+
                 return;
             }
 
