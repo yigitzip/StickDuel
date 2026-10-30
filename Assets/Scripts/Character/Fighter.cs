@@ -255,7 +255,8 @@ namespace StickDuel
             {
                 // Kicking plants the standing foot; a flying kick keeps the jump's momentum.
                 bool plantedKick = kickTimer > 0f && IsGrounded;
-                float target = canAct && !plantedKick ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
+                float charging = sword != null && sword.IsHeld ? sword.MoveScale : 1f; // slow while chambering a thrust
+                float target = canAct && !plantedKick ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed * charging : 0f;
                 float accel = IsGrounded ? groundAcceleration : airAcceleration;
                 velocity.x = Mathf.MoveTowards(velocity.x, target, accel * dt);
             }
@@ -309,16 +310,20 @@ namespace StickDuel
             return true;
         }
 
-        /// <summary>Short forward burst that carries a released thrust.</summary>
-        public void Lunge()
+        /// <summary>
+        /// Forward dash that carries a released thrust; speed and length grow with the charge.
+        /// Returns how long the dash lasts (0 when it cannot dash: in the air, staggered...).
+        /// </summary>
+        public float Lunge(float speedScale = 1f, float lengthScale = 1f)
         {
             if (!ControlsEnabled || IsDead || staggerTimer > 0f || !IsGrounded)
             {
-                return;
+                return 0f;
             }
 
-            lungeTimer = lungeDuration;
-            Body.linearVelocity = new Vector2(Facing * lungeSpeed, Body.linearVelocity.y);
+            lungeTimer = lungeDuration * lengthScale;
+            Body.linearVelocity = new Vector2(Facing * lungeSpeed * speedScale, Body.linearVelocity.y);
+            return lungeTimer;
         }
 
         /// <summary>Ground roll to the left (-1) or right (+1); invulnerable while it lasts.</summary>
@@ -470,6 +475,7 @@ namespace StickDuel
 
         /// <summary>Locks movement briefly, e.g. after your blade was parried.</summary>
         public void ApplyStagger(float seconds) => staggerTimer = Mathf.Max(staggerTimer, seconds);
+        public bool IsStaggered => staggerTimer > 0f;
 
         public void TakeHit(float damage, Vector2 knockback, bool headshot)
         {
@@ -482,6 +488,11 @@ namespace StickDuel
             Body.linearVelocity = new Vector2(Body.linearVelocity.x * 0.3f, Mathf.Max(Body.linearVelocity.y, 0f));
             Body.AddForce(knockback, ForceMode2D.Impulse);
             staggerTimer = 0.18f + damage * 0.005f;
+            if (sword != null)
+            {
+                sword.CancelCharge(); // a hit knocks the chambered thrust out of you
+            }
+
             if (rig != null)
             {
                 rig.Flinch(knockback, headshot);

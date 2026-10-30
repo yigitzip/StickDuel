@@ -311,6 +311,17 @@ namespace StickDuel
         }
 
         public void Beep(float pitch = 1f) => Play(beep, 0.5f, pitch);
+
+        /// <summary>Thrust charge reached <paramref name="level"/>: a rising beep and sparks at the tip; full charge adds a camera punch-in.</summary>
+        public void ChargeLevelUp(Vector2 tip, int level, Color color)
+        {
+            Play(beep, 0.35f, 0.8f + level * 0.25f);
+            Burst(sparks, tip, Vector2.up, 180f, 4 + level * 4, 1f, 3f + level, 0.03f, 0.07f, color, 0.3f);
+            if (level == 3 && cameraRig != null)
+            {
+                cameraRig.Punch(0.2f);
+            }
+        }
         public void Gong() => Play(gong, 0.8f, 1f);
 
         public void Hitstop(float seconds)

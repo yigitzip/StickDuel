@@ -58,10 +58,29 @@ namespace StickDuel
             template.gameObject.SetActive(false);
             template.sword.gameObject.SetActive(false);
 
+            // Castle look: a medieval arming sword in place of the katana, art only. The katana's
+            // reach, hitbox and damage (Equip, just before) stay; guards clone the template's blade.
+            Sprite castleSword = CastleSwordSprite();
+            duel.Player.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
+            template.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
+
             cameraRig = Camera.main.GetComponent<CameraRig>();
             cameraRig.SetBounds(0f, CastleLevel.Width, 5f);
             cameraRig.SetFixedFollow(duel.Player);
             if (Fx.Instance != null) Fx.Instance.Calm = true; // Fx lives in the scene: a reload resets it
+        }
+
+        /// <summary>
+        /// Resources/Castle/Sword: pointing right, grip centre at x=80px on the blade axis (mid
+        /// height), tip at x=503px. Scaled so the tip lands where the katana's does (Weapon.All[0]).
+        /// </summary>
+        private static Sprite CastleSwordSprite()
+        {
+            const float gripPixel = 80f, tipPixel = 503f;
+            Weapon katana = Weapon.All[0];
+            var texture = Resources.Load<Texture2D>("Castle/Sword");
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                new Vector2(gripPixel / texture.width, 0.5f), (tipPixel - gripPixel) / katana.Tip);
         }
 
         private void Start()

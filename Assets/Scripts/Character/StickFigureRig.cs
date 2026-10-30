@@ -74,6 +74,10 @@ namespace StickDuel
         [SerializeField, Range(-0.25f, 0.25f)] private float armPumpLead = 0.05f;
         [Tooltip("How quickly the free hand follows its target while running (walk uses 14).")]
         [SerializeField, Min(1f)] private float runArmFollowRate = 30f;
+        [Header("Thrust charge pose (visual only)")]
+        [Tooltip("At full charge the knees bend this much more and the torso hunches forward this many degrees.")]
+        [SerializeField, Min(0f)] private float chargeCrouch = 0.07f;
+        [SerializeField, Range(0f, 20f)] private float chargeLeanForward = 8f;
         [Tooltip("While running with a sword, the drawn sword shoulder settles back by up to this much so the arm extends.")]
         [SerializeField, Min(0f)] private float swordRunShoulderPullback = 0.08f;
         [Tooltip("The sword arm never straightens past this fraction of its length (keeps a natural elbow, never stretches).")]
@@ -444,11 +448,12 @@ namespace StickDuel
             spinScale = spin >= 0f ? Mathf.Cos(spin * Mathf.PI * 2f) : 1f;
             spinPivotX = hip.x;
             float spinCrouch = spin >= 0f ? Mathf.Sin(spin * Mathf.PI) * 0.12f : 0f;
-            float crouch = -0.025f * (1f - walkBlend) * (1f - airBlend) - spinCrouch;
+            float charge = fighter.sword != null && fighter.sword.IsHeld ? fighter.sword.Charge01 : 0f;
+            float crouch = -0.025f * (1f - walkBlend) * (1f - airBlend) - spinCrouch - chargeCrouch * charge * (1f - airBlend);
             Vector2 pelvis = hip + new Vector2(sway, bob + crouch - landDip);
 
             // Spine: lean into motion, away from hits, slightly forward in stance.
-            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - moveDir * runLeanDegrees * runBlend - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
+            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - moveDir * runLeanDegrees * runBlend - facing * chargeLeanForward * charge - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
             lean = Mathf.Clamp(Mathf.Lerp(lean, -targetLean, 1f - Mathf.Exp(-10f * dt)), -18f, 18f);
             // Kicking: the torso tips back to counterbalance the raised leg.
             Vector2 up = Rotate(Vector2.up, -(lean - facing * KickReach(fighter.KickProgress) * 24f));

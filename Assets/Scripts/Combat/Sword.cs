@@ -53,6 +53,35 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float thrustHandSpeed = 34f;
         [SerializeField, Min(0f)] private float thrustDuration = 0.18f;
 
+        [Header("Thrust Charge")]
+        [Tooltip("Hold time for charge level 2 and for full charge (level 3). Level 1 is minChamberTime.")]
+        [SerializeField, Min(0f)] private float chargeLevel2Time = 0.45f;
+        [SerializeField, Min(0f)] private float chargeFullTime = 0.9f;
+        [Tooltip("Multipliers for charge levels 1, 2 and full (x, y, z).")]
+        [SerializeField] private Vector3 chargeDamage = new Vector3(1f, 1.3f, 1.7f);
+        [SerializeField] private Vector3 chargeKnockback = new Vector3(1f, 1.3f, 1.8f);
+        [Tooltip("Dash speed and dash length multipliers per charge level.")]
+        [SerializeField] private Vector3 chargeLunge = new Vector3(1.1f, 1.3f, 1.5f);
+        [SerializeField] private Vector3 chargeLungeLength = new Vector3(1f, 1.5f, 2f);
+        [Tooltip("After a thrust is released, no new charge for this long.")]
+        [SerializeField, Min(0f)] private float thrustCooldown = 3f;
+        [Tooltip("Chambered hand: this far below the shoulder, pulled back level with the blade pointing straight ahead.")]
+        [SerializeField, Min(0f)] private float chamberDrop = 0.12f;
+        [Tooltip("A released thrust keeps its charge bonus for this long (the lunge can land the hit a little after the snap).")]
+        [SerializeField, Min(0f)] private float chargedHitWindow = 0.3f;
+        [Tooltip("A full-charge thrust that lands staggers the victim this long.")]
+        [SerializeField, Min(0f)] private float fullChargeStagger = 0.45f;
+        [Tooltip("A full-charge thrust into a blade breaks the guard: the defender and their blade reel this long, the attacker does not.")]
+        [SerializeField, Min(0f)] private float guardBreakStagger = 0.6f;
+        [Tooltip("Stamina per second while charging past level 1; with none left the charge stops growing.")]
+        [SerializeField, Min(0f)] private float chargeStaminaPerSecond = 15f;
+        [Tooltip("Holding a full charge longer than this tires the arm: the charge drops back to level 1.")]
+        [SerializeField, Min(0f)] private float chargeHoldLimit = 1.6f;
+        [Tooltip("Walk speed multiplier while charging.")]
+        [SerializeField, Range(0f, 1f)] private float chargeMoveScale = 0.55f;
+        [Tooltip("Colour of the charge sparks and callouts (the blade itself keeps its colour).")]
+        [SerializeField] private Color chargeColor = new Color(1f, 0.72f, 0.3f);
+
         [Header("Parry")]
         [Tooltip("Blade-on-blade impacts at least this fast stagger both blades.")]
         [SerializeField, Min(0f)] private float clashStaggerSpeed = 5f;
@@ -113,6 +142,12 @@ namespace StickDuel
         private bool trailIsSpin;
         private float chamberTime;
         private float thrustTimer;
+        private float charge;         // seconds of charge actually built (stamina-limited)
+        private float heldAtFull;
+        private bool chargeTired, warnedNoStamina;
+        private int thrustLevel;      // charge level of the last released thrust
+        private float chargedHitUntil;
+        private float thrustReadyTime;
         private float idleTimer;
         private bool flying; // thrown and not yet landed: the edge still cuts
         private bool wasRolling;
@@ -128,6 +163,15 @@ namespace StickDuel
         public bool IsStaggered => staggerTimer > 0f;
         /// <summary>0→1 through a spin attack, -1 when not spinning (drives the body spin in the rig).</summary>
         public float SpinProgress => spinTimer > 0f ? 1f - spinTimer / spinDuration : -1f;
+        /// <summary>0 not charging, 1..3 charge level of the chambered thrust (3 = full).</summary>
+        public int ChargeLevel => charge >= chargeFullTime ? 3 : charge >= chargeLevel2Time ? 2 : charge >= minChamberTime ? 1 : 0;
+        /// <summary>0→1 charge build-up while chambering (drives the crouch in the rig and the blade glow).</summary>
+        public float Charge01 => chargeFullTime > 0f ? Mathf.Clamp01(charge / chargeFullTime) : 0f;
+        /// <summary>Walk speed multiplier for the owner while chambering.</summary>
+        public float MoveScale => chamberTime > 0f ? chargeMoveScale : 1f;
+        /// <summary>Holding thrust with the cooldown over: the hand is pulled back and the charge builds.</summary>
+        private bool Chambering => owner.thrustHeld && !owner.backGuard && Time.time >= thrustReadyTime;
+        private bool FullChargeThrust => thrustLevel == 3 && Time.time < chargedHitUntil;
         private Vector2 BodyTip => body.position + (Vector2)(Quaternion.Euler(0f, 0f, body.rotation) * tip.localPosition);
 
         private void Awake()
@@ -192,7 +236,7 @@ namespace StickDuel
             float armDelta = Mathf.DeltaAngle(previousArmAngle, armAngle);
             previousArmAngle = armAngle;
             unwrappedArmAngle += armDelta;
-            if (owner.backGuard || owner.thrustHeld)
+            if (owner.backGuard || Chambering || thrustTimer > 0f)
             {
                 idleTimer = 0f;
             }
@@ -279,14 +323,15 @@ namespace StickDuel
             }
 
             relativeTipAngle += armDelta * facing * swingFollowGain;
-            if (owner.thrustHeld && !owner.backGuard)
+            if (Chambering || thrustTimer > 0f)
             {
-                // Chambered thrust: line the blade up with the arm so it goes in point first.
-                relativeTipAngle = Mathf.MoveTowards(relativeTipAngle, 0f, backGuardTurnSpeed * dt);
+                // Chambered and thrusting: the blade held dead level, point first along the facing.
+                float level = Mathf.DeltaAngle(armAngle, facing > 0 ? 0f : 180f) * facing;
+                relativeTipAngle = Mathf.MoveTowards(relativeTipAngle, level, backGuardTurnSpeed * dt);
             }
 
             UpdateBackGuard(armAngle, facing, dt);
-            if (!owner.backGuard && !owner.thrustHeld && idleTimer >= idleReturnDelay)
+            if (!owner.backGuard && !Chambering && idleTimer >= idleReturnDelay)
             {
                 outwardLimit = Mathf.Max(outwardLimit, restingAngleOffset);
                 relativeTipAngle = Mathf.MoveTowards(
@@ -356,25 +401,95 @@ namespace StickDuel
             relativeTipAngle = Mathf.Clamp(offset * facing, -inwardAngleLimit, outwardLimit);
         }
 
-        /// <summary>Hold = pull the hand back (chamber). Release after a short hold = snap it out and lunge.</summary>
+        /// <summary>
+        /// Hold = pull the hand back (chamber) and build charge; release after a short hold = snap it
+        /// out and lunge. Longer holds reach charge levels 2 and 3 (harder, further, full charge
+        /// breaks guards) at a stamina cost; a hit cancels the charge.
+        /// </summary>
         private void UpdateThrust(float dt)
         {
             thrustTimer -= dt;
-            bool chambering = owner.thrustHeld && !owner.backGuard && staggerTimer <= 0f;
-            if (chambering)
+            if (Chambering && staggerTimer <= 0f && !owner.IsStaggered)
             {
                 chamberTime += dt;
+                UpdateCharge(dt);
                 return;
             }
 
             if (chamberTime >= minChamberTime)
             {
-                thrustTimer = thrustDuration;
-                owner.Lunge();
+                // Release: the body dashes forward and the blade shoots out level for the whole dash.
+                thrustLevel = Mathf.Max(1, ChargeLevel);
+                float dash = owner.Lunge(chargeLunge[thrustLevel - 1], chargeLungeLength[thrustLevel - 1]);
+                thrustTimer = Mathf.Max(thrustDuration, dash);
+                chargedHitUntil = Time.time + Mathf.Max(chargedHitWindow, dash);
+                thrustReadyTime = Time.time + thrustCooldown;
+                if (thrustLevel == 3 && Fx.Instance != null)
+                {
+                    Fx.Instance.Swoosh(TipPosition, maxSwingSpeed);
+                    Fx.Instance.Shake(0.25f);
+                }
             }
 
-            chamberTime = 0f;
+            CancelCharge();
         }
+
+        private void UpdateCharge(float dt)
+        {
+            int before = ChargeLevel;
+            if (chargeTired)
+            {
+                return;
+            }
+
+            if (charge < minChamberTime)
+            {
+                charge += dt; // the first level is free
+            }
+            else if (charge < chargeFullTime)
+            {
+                if (owner.TrySpendStamina(chargeStaminaPerSecond * dt))
+                {
+                    charge += dt;
+                }
+                else if (!warnedNoStamina && Fx.Instance != null)
+                {
+                    warnedNoStamina = true;
+                    Fx.Instance.Callout(owner.ShoulderPosition + Vector2.up * 0.6f, "TIRED", new Color(0.75f, 0.75f, 0.8f), 0.7f);
+                }
+            }
+            else
+            {
+                heldAtFull += dt;
+                if (heldAtFull > chargeHoldLimit)
+                {
+                    // Held too long: the arm tires and the charge falls back to the weakest level.
+                    chargeTired = true;
+                    charge = minChamberTime;
+                    if (Fx.Instance != null)
+                    {
+                        Fx.Instance.Callout(owner.ShoulderPosition + Vector2.up * 0.6f, "TIRED", new Color(0.75f, 0.75f, 0.8f), 0.7f);
+                    }
+                }
+            }
+
+            int after = ChargeLevel;
+            if (after > before && Fx.Instance != null)
+            {
+                Fx.Instance.ChargeLevelUp(TipPosition, after, chargeColor);
+            }
+        }
+
+        /// <summary>Drops a chambered thrust without striking (hit, parried, dropped the blade).</summary>
+        public void CancelCharge()
+        {
+            chamberTime = 0f;
+            charge = 0f;
+            heldAtFull = 0f;
+            chargeTired = false;
+            warnedNoStamina = false;
+        }
+
 
         /// <summary>Lets the hilt whip around the hand, but only within <see cref="maxGripSlack"/>.</summary>
         private void KeepGripInHand()
@@ -408,8 +523,18 @@ namespace StickDuel
                 return owner.Body.position + new Vector2(owner.RollDirection * 0.2f, -0.45f);
             }
 
-            float distance = owner.thrustHeld && !owner.backGuard ? chamberReach : reach;
-            Vector2 target = shoulder + direction * distance;
+            // Chamber and thrust run level along the facing, so the blade goes in straight.
+            if (thrustTimer > 0f)
+            {
+                return shoulder + new Vector2(owner.Facing * reach, -chamberDrop);
+            }
+
+            if (Chambering)
+            {
+                return shoulder + new Vector2(owner.Facing * chamberReach, -chamberDrop);
+            }
+
+            Vector2 target = shoulder + direction * reach;
             target.y = Mathf.Max(target.y, shoulder.y + minHandHeight);
             return target;
         }
@@ -509,6 +634,12 @@ namespace StickDuel
                 damage *= spinDamageMultiplier;
             }
 
+            int level = Time.time < chargedHitUntil ? thrustLevel : 0;
+            if (level > 0)
+            {
+                damage *= chargeDamage[level - 1];
+            }
+
             damage *= owner.damageScale;
 
             Vector2 direction = relative.normalized;
@@ -519,7 +650,23 @@ namespace StickDuel
             {
                 knockback.x *= spinKnockbackMultiplier;
             }
+
+            if (level > 0)
+            {
+                knockback.x *= chargeKnockback[level - 1];
+            }
+
             victim.TakeHit(damage, knockback, headshot);
+            if (level == 3)
+            {
+                victim.ApplyStagger(fullChargeStagger);
+                chargedHitUntil = 0f;
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Crit(point, direction, damage);
+                    Fx.Instance.Callout(point + Vector2.up * 1f, "PIERCE!", chargeColor, 1.2f);
+                }
+            }
             if (Fx.Instance != null)
             {
                 Fx.Instance.Hit(point, direction, victim.color, damage, headshot);
@@ -560,7 +707,29 @@ namespace StickDuel
                 Fx.Instance.Clash(point, speed);
             }
 
-            if (speed < clashStaggerSpeed || IsStaggered || other.IsStaggered)
+            if (IsStaggered || other.IsStaggered)
+            {
+                return;
+            }
+
+            // A full-charge thrust breaks a guard: the blocking blade and its owner reel, the thrust does not.
+            if (FullChargeThrust || other.FullChargeThrust)
+            {
+                Sword breaker = FullChargeThrust ? this : other;
+                Sword broken = breaker == this ? other : this;
+                broken.Stagger(guardBreakStagger);
+                broken.owner.ApplyStagger(guardBreakStagger);
+                breaker.chargedHitUntil = Time.time + chargedHitWindow; // the thrust carries on through
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Callout(point, "GUARD BREAK!", chargeColor, 1.1f);
+                    Fx.Instance.Shake(0.4f);
+                }
+
+                return;
+            }
+
+            if (speed < clashStaggerSpeed)
             {
                 return;
             }
@@ -609,8 +778,9 @@ namespace StickDuel
         {
             staggerTimer = Mathf.Max(staggerTimer, seconds);
             spinTimer = 0f; // a parry stops a spin dead
-            chamberTime = 0f;
+            CancelCharge();
             thrustTimer = 0f;
+            chargedHitUntil = 0f;
             // Bounce the blade back the way it came.
             float spin = body.angularVelocity;
             body.angularVelocity = -Mathf.Sign(spin == 0f ? 1f : spin) * Mathf.Max(240f, Mathf.Abs(spin) * 0.5f);
@@ -649,6 +819,8 @@ namespace StickDuel
             body.gravityScale = 1.5f;
             staggerTimer = 0f;
             spinTimer = 0f;
+            CancelCharge();
+            chargedHitUntil = 0f;
         }
 
         /// <summary>On the ground (or after a thrown hit): harmless and sliding to a stop.</summary>
@@ -672,8 +844,9 @@ namespace StickDuel
             staggerTimer = 0f;
             spinTimer = 0f;
             recoverUntil = 0f;
-            chamberTime = 0f;
+            CancelCharge();
             thrustTimer = 0f;
+            chargedHitUntil = 0f;
             idleTimer = 0f;
             hitCollider.enabled = true;
             lastHitTime.Clear();
