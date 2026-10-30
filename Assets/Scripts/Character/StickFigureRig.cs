@@ -86,6 +86,8 @@ namespace StickDuel
         private Line spine, frontLeg, backLeg, frontArm, backArm, band, eye, ribbon, belt;
         private Dot head, frontHand, backHand;
         private SpriteRenderer headShine;
+        private ArmorPiece helmet;
+        private Line[] armored;
         private Color accent;
 
         // Spin attack: the drawn body is squashed horizontally by cos(turn) around the hip, which
@@ -116,6 +118,10 @@ namespace StickDuel
             public LineRenderer Fill;
             public LineRenderer Outline;
             public LineRenderer Highlight; // lighter stripe nudged towards the light (upper left)
+            /// <summary>Armor plates laid along this line's bones (Survival); null when unarmored.</summary>
+            public ArmorPiece[] Armor;
+            /// <summary>+1 facing right, -1 mirrored: flips the armor across its bone.</summary>
+            public float Mirror = 1f;
             /// <summary>Below 1 the drawn pose is still easing in from the captured one.</summary>
             public float Weight = 1f;
             private readonly Vector3[] points;
@@ -174,6 +180,14 @@ namespace StickDuel
                     Highlight.positionCount = points.Length;
                     Highlight.SetPositions(lit);
                 }
+
+                if (Armor != null)
+                {
+                    foreach (ArmorPiece piece in Armor)
+                    {
+                        piece.Lay(points[piece.From], points[piece.To], Mirror);
+                    }
+                }
             }
 
             public void SetColor(Color color)
@@ -186,6 +200,32 @@ namespace StickDuel
                     Highlight.startColor = shine;
                     Highlight.endColor = shine;
                 }
+            }
+        }
+
+        /// <summary>
+        /// One armor sprite laid along a bone: the art's bone runs along +x from its pivot and is
+        /// <see cref="Length"/> long, so it is rotated onto the bone, stretched to the bone's
+        /// length and mirrored across it when the fighter faces left.
+        /// </summary>
+        private sealed class ArmorPiece
+        {
+            public SpriteRenderer Sprite;
+            public int From, To;
+            public float Length;
+            public float Depth; // z nudge: in front of the limb drawn at the same sorting order
+            public float Start; // 0..1 along the bone where the piece begins (the stick shows before it)
+            public float Width = 1f;
+
+            public void Lay(Vector2 root, Vector2 end, float mirror)
+            {
+                root = Vector2.Lerp(root, end, Start);
+                mirror *= Width;
+                Vector2 bone = end - root;
+                Sprite.transform.SetPositionAndRotation(
+                    new Vector3(root.x, root.y, -Depth),
+                    Quaternion.Euler(0f, 0f, Mathf.Atan2(bone.y, bone.x) * Mathf.Rad2Deg));
+                Sprite.transform.localScale = new Vector3(Mathf.Max(bone.magnitude, 0.001f) / Length, mirror, 1f);
             }
         }
 
@@ -321,6 +361,100 @@ namespace StickDuel
             }
         }
 
+        // Armor art (Resources/Armor, cut by Tools-style script from the painted pieces): pivot at the
+        // bone root, bone along +x, ArmorPixelsPerUnit, so the bone is exactly its nominal length.
+        private const float ArmorPixelsPerUnit = 320f;
+        private const float HelmetLength = 0.2719f; // nominal "bone" of the helmet: head centre up along headUp
+        private const float HelmetScale = 0.75f;    // drawn smaller than the art's natural fit
+        private static readonly Color GauntletColor = new Color(0.55f, 0.55f, 0.6f);
+        private static readonly Color BackArmorTint = new Color(0.68f, 0.68f, 0.74f);
+        private static readonly Color HitArmorTint = new Color(1f, 0.55f, 0.55f);
+        private const float ArmorTeamTint = 0.4f; // how far the steel leans to the fighter's colour
+        private Color armorTint = Color.white;
+
+        /// <summary>
+        /// Survival: plate armor over the stick body (helmet, breastplate, arms, legs, sabatons),
+        /// tinted towards the fighter's colour so the player (blue steel) and the guards (red,
+        /// orange, crimson) stay apart. Visual only: hitboxes and physics are untouched.
+        /// </summary>
+        public void WearArmor() => WearArmor(Color.Lerp(Color.white, fighter.color, ArmorTeamTint));
+
+        /// <summary>Same, with the steel tinted <paramref name="tint"/> (gold for the strongest guards).</summary>
+        public void WearArmor(Color tint)
+        {
+            if (helmet != null)
+            {
+                return;
+            }
+
+            armorTint = tint;
+            //                         piece        bones order depth   pivot                            nominal        start width
+            spine.Armor = new[] { Armor("Chest", 0, 2, 11, 0.01f, new Vector2(0.0649f, 0.5594f), Waist + Chest, 0f, 1f) };
+            foreach (Line leg in new[] { frontLeg, backLeg })
+            {
+                int order = leg == frontLeg ? 12 : 9;
+                leg.Armor = new[]
+                {
+                    Armor("Thigh", 0, 1, order, 0.012f, new Vector2(0.0961f, 0.5362f), Thigh, 0f, 1f),
+                    Armor("Shin", 1, 2, order, 0.01f, new Vector2(-0.0596f, 0.4676f), Shin, 0f, 1f),
+                    Armor("Boot", 2, 3, order, 0.008f, new Vector2(0.2052f, 0.4068f), FootLength, 0f, 1f),
+                };
+            }
+
+            foreach (Line arm in new[] { frontArm, backArm })
+            {
+                int order = arm == frontArm ? 15 : 10;
+                arm.Armor = new[]
+                {
+                    Armor("UpperArm", 0, 1, order, 0.012f, new Vector2(0.0637f, 0.525f), UpperArm, 0f, 1f),
+                    Armor("Forearm", 1, 2, order, 0.01f, new Vector2(0.2143f, 0.5556f), Forearm, 0f, 1f),
+                };
+            }
+
+            helmet = Armor("Helmet", 0, 1, 14, 0.01f, new Vector2(0.5751f, 0.5892f), HelmetLength, 0f, 1f);
+            armored = new[] { spine, frontLeg, backLeg, frontArm, backArm };
+            // The plates cover the stick body; the hands become plain steel gauntlets.
+            foreach (Line line in new[] { spine, frontLeg, backLeg, frontArm, backArm, belt })
+            {
+                line.Fill.enabled = line.Outline.enabled = line.Highlight.enabled = false;
+            }
+
+            band.Fill.enabled = eye.Fill.enabled = ribbon.Fill.enabled = false;
+            head.Fill.enabled = head.Outline.enabled = headShine.enabled = false;
+        }
+
+        private ArmorPiece Armor(string art, int from, int to, int order, float depth, Vector2 pivot, float length, float start, float width)
+        {
+            var texture = Resources.Load<Texture2D>("Armor/" + art);
+            var go = new GameObject("Armor" + art);
+            go.transform.SetParent(transform, false);
+            var sprite = go.AddComponent<SpriteRenderer>();
+            sprite.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), pivot, ArmorPixelsPerUnit);
+            sprite.sortingOrder = order;
+            return new ArmorPiece { Sprite = sprite, From = from, To = to, Length = length * (1f - start), Depth = depth, Start = start, Width = width };
+        }
+
+        /// <summary>Which way the armor faces this frame, and its tint (back limbs darker, red on a hit).</summary>
+        private void DressArmor(float mirror, bool flash)
+        {
+            if (armored == null)
+            {
+                return;
+            }
+
+            foreach (Line line in armored)
+            {
+                line.Mirror = mirror;
+                bool back = line == backLeg || line == backArm;
+                foreach (ArmorPiece piece in line.Armor)
+                {
+                    piece.Sprite.color = flash ? HitArmorTint : back ? armorTint * BackArmorTint : armorTint;
+                }
+            }
+
+            helmet.Sprite.color = flash ? HitArmorTint : armorTint;
+        }
+
         public void Flinch(Vector2 knockback, bool headshot)
         {
             flinchVelocity += knockback.normalized * (headshot ? 4.5f : 3f);
@@ -342,10 +476,11 @@ namespace StickDuel
             backLeg.SetColor(back);
             backArm.SetColor(back);
             head.Fill.color = front;
-            frontHand.Fill.color = front;
-            backHand.Fill.color = back;
+            frontHand.Fill.color = helmet != null ? (flash ? HitArmorTint : GauntletColor * armorTint) : front;
+            backHand.Fill.color = helmet != null ? (flash ? HitArmorTint : GauntletColor * armorTint * BackArmorTint) : back;
             headShine.color = Color.Lerp(front, Color.white, 0.55f);
 
+            DressArmor(fighter.IsRolling ? fighter.RollDirection : fighter.Facing * Mathf.Sign(spinScale == 0f ? 1f : spinScale), flash);
             int state = fighter.IsDead ? 2 : fighter.IsRolling ? 1 : 0;
             if (state != poseState)
             {
@@ -678,6 +813,13 @@ namespace StickDuel
             head.Outline.transform.rotation = head.Fill.transform.rotation;
 
             Vector2 headRight = new Vector2(headUp.y, -headUp.x); // headUp rotated -90°
+            if (helmet != null)
+            {
+                // Turned with the head; squashed edge-on and mirrored (seen from behind) through a spin.
+                float turned = facing * Mathf.Sign(spinScale == 0f ? 1f : spinScale) * Mathf.Max(Mathf.Abs(spinScale), 0.15f);
+                helmet.Lay(center, center + headUp * HelmetLength * HelmetScale, turned * HelmetScale);
+            }
+
             headShine.transform.position = center + headUp * 0.12f - headRight * 0.05f;
             headShine.transform.rotation = head.Fill.transform.rotation;
             Vector2 bandCenter = center + headUp * 0.06f;
@@ -687,7 +829,7 @@ namespace StickDuel
             Vector2 eyeCenter = center - headUp * 0.015f;
             // Mirrors to the far side (and hides behind the head) while the back is turned.
             float side = facing * spinScale;
-            eye.Fill.enabled = spinScale > 0.2f;
+            eye.Fill.enabled = spinScale > 0.2f && helmet == null;
             eye.Set(eyeCenter + headRight * side * 0.05f, eyeCenter + headRight * side * 0.15f);
 
             SimulateRibbon(bandCenter - headRight * side * HeadRadius, dt);

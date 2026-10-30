@@ -33,11 +33,11 @@ namespace StickDuel
         /// <summary>Lowest the camera centre goes (the castle raises it to the current floor).</summary>
         public float MinY { set => minY = value; }
 
-        /// <summary>Follows one target at the starting zoom without framing or zooming other fighters.</summary>
-        public void SetFixedFollow(Fighter target)
+        /// <summary>Follows one target at the starting zoom (times <paramref name="zoom"/>) without framing or zooming other fighters.</summary>
+        public void SetFixedFollow(Fighter target, float zoom = 1f)
         {
             fixedFollowTarget = target;
-            fixedFollowSize = cam != null ? cam.orthographicSize : fixedFollowSize;
+            fixedFollowSize = (cam != null ? cam.orthographicSize : fixedFollowSize) / zoom;
             zoomPunch = 0f;
         }
 

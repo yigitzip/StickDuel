@@ -123,7 +123,8 @@ namespace StickDuel
                 rect.anchoredPosition = new Vector2(outerEdge + 205f + i * 46f, frame.anchoredPosition.y - 66f);
 
                 Image back = slot.AddComponent<Image>();
-                back.sprite = Shuriken.Sprite;
+                back.sprite = Shuriken.Icon;
+                back.preserveAspect = true; // the Survival kunai is long and thin
                 back.color = new Color(0.1f, 0.06f, 0.14f, 0.6f);
                 back.raycastTarget = false;
 
@@ -132,7 +133,8 @@ namespace StickDuel
                 front.rectTransform.anchorMin = Vector2.zero;
                 front.rectTransform.anchorMax = Vector2.one;
                 front.rectTransform.sizeDelta = Vector2.zero;
-                front.sprite = Shuriken.Sprite;
+                front.sprite = Shuriken.Icon;
+                front.preserveAspect = true;
                 front.type = Image.Type.Filled;
                 front.fillMethod = Image.FillMethod.Radial360;
                 front.fillOrigin = (int)Image.Origin360.Top;

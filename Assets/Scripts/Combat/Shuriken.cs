@@ -31,6 +31,12 @@ namespace StickDuel
 
         /// <summary>Procedural four-bladed steel shuriken, shared by the projectile and the HUD.</summary>
         public static Sprite Sprite => sprite != null ? sprite : sprite = CreateSprite();
+        /// <summary>Survival swaps in a kunai (art only): it flies point first instead of spinning.</summary>
+        public static Sprite Kunai;
+        /// <summary>What is thrown and shown in the HUD right now.</summary>
+        public static Sprite Icon => Kunai != null ? Kunai : Sprite;
+
+        private bool pointFirst;
 
         public static Vector2 PositionAt(Vector2 origin, Vector2 velocity, float gravity, float t)
             => origin + velocity * t + 0.5f * gravity * t * t * Vector2.down;
@@ -48,8 +54,9 @@ namespace StickDuel
             shuriken.damage = damage;
 
             var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = Sprite;
+            renderer.sprite = Icon;
             renderer.sortingOrder = 20;
+            shuriken.pointFirst = Kunai != null;
         }
 
         private void Update()
@@ -67,8 +74,15 @@ namespace StickDuel
                 return;
             }
 
-            // Clockwise when flying right, like a real throw.
-            transform.Rotate(0f, 0f, -Mathf.Sign(velocity.x == 0f ? 1f : velocity.x) * SpinSpeed * dt);
+            if (pointFirst)
+            {
+                transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg);
+            }
+            else
+            {
+                // Clockwise when flying right, like a real throw.
+                transform.Rotate(0f, 0f, -Mathf.Sign(velocity.x == 0f ? 1f : velocity.x) * SpinSpeed * dt);
+            }
 
             Vector2 from = transform.position;
             flightTime += dt;

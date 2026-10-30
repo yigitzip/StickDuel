@@ -119,11 +119,12 @@ namespace StickDuel
         {
             float y = floor * FloorHeight;
             float inner = FloorHeight - Slab;
-            // Stone block columns: stepped base, rough-cut drum stones, a gothic arcaded capital.
-            var pillar = new Color(0.62f, 0.58f, 0.68f);
+            // Painted gothic stone columns, floor to ceiling, at the art's own proportions.
+            var pillar = new Color(0.62f, 0.58f, 0.68f); // window sills
+            float pillarWidth = inner * column.rect.width / column.rect.height;
             for (float x = Tower; x <= Tower + RoomLength * 4f + 0.1f; x += 10f)
             {
-                Quad(root, "Pillar", new Vector2(x - 0.75f, y), new Vector2(1.5f, inner), pillar, -90, column);
+                Quad(root, "Pillar", new Vector2(x - pillarWidth * 0.5f, y), new Vector2(pillarWidth, inner), Color.white, -90, column);
             }
 
             for (int slot = 0; slot < 4; slot++)
@@ -169,7 +170,7 @@ namespace StickDuel
                 Glow(root, new Vector2(centre, y + 4f), 6f, new Color(1f, 0.55f, 0.2f, 0.45f), glowMaterial).AddComponent<Flicker>();
 
                 // Banners hang on rods, corded to a nail under the ceiling, either side of the torch.
-                foreach (float side in new[] { -3.5f, 3.5f })
+                foreach (float side in new[] { -3.85f, 3.85f })
                 {
                     Quad(root, "Banner", new Vector2(centre + side - 0.7f, y + inner - 3.46f), new Vector2(1.4f, 3.36f), Color.white, -83, banners[floor]);
                 }
@@ -297,10 +298,8 @@ namespace StickDuel
                 banners[f] = Banner(cloth[f]);
             }
 
-            column = Pillar();
-            var torchArt = Resources.Load<Texture2D>("Castle/Torch"); // painted, flameless; the fire is drawn below
-            torchArt.filterMode = FilterMode.Point;
-            torch = Sprite.Create(torchArt, new Rect(0, 0, torchArt.width, torchArt.height), Vector2.zero, 60f);
+            column = PaintedSprite("Castle/Pillar");
+            torch = PaintedSprite("Castle/Torch", FilterMode.Point); // painted, flameless; the fire is drawn below
             sill = Sprite.Create(Smooth(Paint(32, 8, (x, y) =>
             {
                 // Cylinder lit from the upper left, with vertical flutes.
@@ -393,57 +392,16 @@ namespace StickDuel
             return height * Mathf.Exp(-d * d);
         }
 
-        /// <summary>Full-height column: stepped base, rough drum stones lit as a cylinder, gothic arcaded capital.</summary>
-        private static Sprite Pillar()
-        {
-            const int width = 48, height = 204;
-            return Sprite.Create(Paint(width, height, (x, y) =>
-            {
-                float u = (x + 0.5f) / width * 2f - 1f;
-                float light = 0.78f + 0.22f * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u)) - 0.18f * u;
-                float c = 23.5f, dx = Mathf.Abs(x - c);
-
-                // Stepped base: two courses of blocks, the lower one wider.
-                if (y < 16)
-                {
-                    float halfBase = y < 8 ? 24f : 20.5f;
-                    if (dx > halfBase) return Color.clear;
-                    bool joint = y % 8 == 7 || (x + (y < 8 ? 0 : 6)) % 12 == 0;
-                    return Grey(joint ? 0.45f : (0.82f + (Hash(x / 12, y / 8) - 0.5f) * 0.12f) * light);
-                }
-
-                // Abacus slab and capital: a bell widening upwards, carved with pointed arches.
-                if (y >= 196) return Grey((y == height - 1 ? 0.95f : 0.8f) * light);
-                if (y >= 168)
-                {
-                    float halfCap = y < 176 ? 18f : Mathf.Lerp(18f, 22.5f, (y - 176f) / 20f);
-                    if (dx > halfCap) return Color.clear;
-                    if (y < 176) return Grey((y == 175 || y == 168 ? 0.55f : 0.8f) * light);
-                    float ax = ((x - (int)(c - halfCap)) % 10) - 4.5f;     // position in one arch bay
-                    float ay = y - 178f;
-                    bool inside = ay >= 0f && ay < 14f - ax * ax * 0.28f && Mathf.Abs(ax) < 3.5f;
-                    bool rib = !inside && ay >= -1f && ay < 15.5f - ax * ax * 0.28f && Mathf.Abs(ax) < 4.6f;
-                    return Grey((inside ? 0.42f : rib ? 0.95f : 0.75f) * light);
-                }
-
-                // Shaft: courses of rough-cut stones, some split in two, each with its own shade and a few cracks.
-                if (dx > 16.5f) return Color.clear;
-                int row = (y - 16) / 14, inRow = (y - 16) % 14;
-                int split = Hash(row, 7) > 0.45f ? 10 + (int)(Hash(row, 3) * 14f) : -1;
-                int stone = split >= 0 && x >= 7 + split ? 1 : 0;
-                if (inRow == 0 || (split >= 0 && x == 7 + split)) return Grey(0.38f);
-                float shade = 0.78f + (Hash(row, stone) - 0.5f) * 0.18f;
-                if (inRow == 13) shade += 0.1f;                                  // top edge catches the light
-                if (inRow == 1) shade -= 0.08f;
-                if (Hash(x + row * 31, y) > 0.985f || Hash(x - y + row, row) > 0.993f) shade -= 0.2f; // cracks and pits
-                return Grey(shade * light + (Hash(x * 7, y * 3) - 0.5f) * 0.04f);
-            }), new Rect(0, 0, width, height), Vector2.zero, 32f);
-        }
-
-        private static Color Grey(float v) => new Color(v, v, v);
-
         /// <summary>Shading multiplies alpha too; painted art is either fully there or clear.</summary>
         private static Color Opaque(Color c) => new Color(c.r, c.g, c.b, c.a > 0f ? 1f : 0f);
+
+        /// <summary>A painted Resources texture as a sprite with its pivot at the bottom left (Quad scales it).</summary>
+        private static Sprite PaintedSprite(string path, FilterMode filter = FilterMode.Bilinear)
+        {
+            var texture = Resources.Load<Texture2D>(path);
+            texture.filterMode = filter;
+            return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), Vector2.zero, 60f);
+        }
 
         private static Texture2D Smooth(Texture2D texture)
         {

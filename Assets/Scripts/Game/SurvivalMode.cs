@@ -45,6 +45,9 @@ namespace StickDuel
         public bool IsOver => over;
         public bool Won => won;
 
+        private static readonly Color GoldArmor = new Color(1f, 0.8f, 0.35f);
+        private const float CloseUp = 1.2f; // the castle camera sits closer, so the armored fighters read bigger
+
         /// <summary>Call right after adding the component, before DuelManager is enabled.</summary>
         public void Init(DuelManager duel, CastleLevel castle)
         {
@@ -63,10 +66,12 @@ namespace StickDuel
             Sprite castleSword = CastleSwordSprite();
             duel.Player.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
             template.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
+            duel.Player.rig.WearArmor(); // guards put theirs on as they spawn
+            Shuriken.Kunai = KunaiSprite();
 
             cameraRig = Camera.main.GetComponent<CameraRig>();
             cameraRig.SetBounds(0f, CastleLevel.Width, 5f);
-            cameraRig.SetFixedFollow(duel.Player);
+            cameraRig.SetFixedFollow(duel.Player, CloseUp);
             if (Fx.Instance != null) Fx.Instance.Calm = true; // Fx lives in the scene: a reload resets it
         }
 
@@ -82,6 +87,16 @@ namespace StickDuel
             return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
                 new Vector2(gripPixel / texture.width, 0.5f), (tipPixel - gripPixel) / katana.Tip);
         }
+
+        /// <summary>Resources/Castle/Kunai, pointing right, centred, about this long in the world.</summary>
+        private static Sprite KunaiSprite()
+        {
+            const float length = 0.6f;
+            var texture = Resources.Load<Texture2D>("Castle/Kunai");
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), texture.width / length);
+        }
+
+        private void OnDestroy() => Shuriken.Kunai = null; // the duel arenas keep the shuriken
 
         private void Start()
         {
@@ -285,6 +300,15 @@ namespace StickDuel
 
             guard.gameObject.SetActive(true);
             sword.gameObject.SetActive(true);
+            // The strongest guards wear gold.
+            if (tier == 'b' || tier == 'e')
+            {
+                guard.rig.WearArmor(GoldArmor);
+            }
+            else
+            {
+                guard.rig.WearArmor();
+            }
             ai.SetBounds(0f, CastleLevel.Width); // guards can follow the player across former room boundaries
             guard.ResetFighter(position);
             guard.ControlsEnabled = true;
