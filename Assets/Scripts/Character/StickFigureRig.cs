@@ -36,6 +36,49 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float outlineWidth = 0.06f;
         [SerializeField, Min(0.1f)] private float strideLength = 0.62f;
 
+        [Header("Run cycle (visual only)")]
+        [Tooltip("Speed (0..1 of MoveSpeed) where the walk starts turning into a run; full run at full speed.")]
+        [SerializeField, Range(0f, 0.95f)] private float runStartSpeed = 0.45f;
+        [Tooltip("Ground covered per step at a full run (strideLength is the walking step).")]
+        [SerializeField, Min(0.1f)] private float runStrideLength = 1f;
+        [Tooltip("How fast the run blends in/out (per second): starting to run, jumping, rolling, kicking, spinning or being hit.")]
+        [SerializeField, Min(0f)] private float runBlendSpeed = 6f;
+        [Tooltip("Flinch offset at which the run pose is fully suppressed (the hit pose wins).")]
+        [SerializeField, Min(0.001f)] private float flinchSuppressDistance = 0.05f;
+        [Tooltip("Share of each leg's cycle spent on the floor; under 0.5 leaves a flight phase with both feet up.")]
+        [SerializeField, Range(0.2f, 0.5f)] private float runStanceFraction = 0.36f;
+        [Tooltip("Where the foot lands, as a share of its stance travel ahead of the hip.")]
+        [SerializeField, Range(0f, 1f)] private float runLandAhead = 0.35f;
+        [Tooltip("Toe-off: the heel peels up through this last share of the stance to this toe angle (degrees).")]
+        [SerializeField, Range(0f, 1f)] private float runHeelPeelShare = 0.45f;
+        [SerializeField, Range(0f, 80f)] private float runToeOffAngle = 40f;
+        [Tooltip("Heel kick after toe-off: ankle this far behind the hip and this high off the floor.")]
+        [SerializeField, Min(0f)] private float runHeelKickBack = 0.22f;
+        [SerializeField, Min(0f)] private float runHeelKickHeight = 0.42f;
+        [Tooltip("Knee drive: the ankle swings through this far ahead of the hip at this height.")]
+        [SerializeField, Min(0f)] private float runKneeDriveForward = 0.16f;
+        [SerializeField, Min(0f)] private float runKneeDriveHeight = 0.34f;
+        [Tooltip("Just before landing the foot reaches this much past its landing spot, low.")]
+        [SerializeField, Min(0f)] private float runReachPast = 0.06f;
+        [SerializeField, Min(0f)] private float runReachHeight = 0.1f;
+        [Tooltip("Pelvis up/down through each step: lowest at mid-stance, highest in flight.")]
+        [SerializeField, Min(0f)] private float runBobDepth = 0.035f;
+        [Tooltip("Extra knee bend while running (pelvis drop).")]
+        [SerializeField, Min(0f)] private float runCrouch = 0.05f;
+        [Tooltip("Extra forward lean at a full run, in degrees.")]
+        [SerializeField, Range(0f, 20f)] private float runLeanDegrees = 5f;
+        [Tooltip("Free arm pumps: upper arm swing either way (degrees) with the elbow bent this much.")]
+        [SerializeField, Range(0f, 90f)] private float armPumpAngle = 50f;
+        [SerializeField, Range(0f, 150f)] private float armPumpElbowBend = 95f;
+        [Tooltip("Arm swing timing relative to the opposite leg, as a share of the cycle.")]
+        [SerializeField, Range(-0.25f, 0.25f)] private float armPumpLead = 0.05f;
+        [Tooltip("How quickly the free hand follows its target while running (walk uses 14).")]
+        [SerializeField, Min(1f)] private float runArmFollowRate = 30f;
+        [Tooltip("While running with a sword, the drawn sword shoulder settles back by up to this much so the arm extends.")]
+        [SerializeField, Min(0f)] private float swordRunShoulderPullback = 0.08f;
+        [Tooltip("The sword arm never straightens past this fraction of its length (keeps a natural elbow, never stretches).")]
+        [SerializeField, Range(0.8f, 1f)] private float swordArmMaxExtension = 0.96f;
+
         private Line spine, frontLeg, backLeg, frontArm, backArm, band, eye, ribbon, belt;
         private Dot head, frontHand, backHand;
         private SpriteRenderer headShine;
@@ -47,6 +90,7 @@ namespace StickDuel
         private float spinPivotX;
 
         private float gaitPhase, walkBlend, airBlend, lean, twoHand, landDip, lastVerticalSpeed, flashTimer;
+        private float runBlend, currentStride; // 0 walk .. 1 run; step length blended between the two
         private bool wasGrounded = true;
         private Vector2 flinch, flinchVelocity, freeBackHand;
         private readonly bool[] footLifted = new bool[2];
@@ -257,7 +301,8 @@ namespace StickDuel
         /// <summary>Clears animation state, e.g. after a respawn.</summary>
         public void Snap()
         {
-            walkBlend = airBlend = lean = landDip = twoHand = 0f;
+            walkBlend = airBlend = lean = landDip = twoHand = runBlend = 0f;
+            currentStride = strideLength;
             flinch = flinchVelocity = Vector2.zero;
             flashTimer = 0f;
             wasGrounded = true;
@@ -360,7 +405,19 @@ namespace StickDuel
             float speed01 = Mathf.Clamp01(Mathf.Abs(velocity.x) / Mathf.Max(0.01f, fighter.MoveSpeed));
             walkBlend = Mathf.MoveTowards(walkBlend, grounded ? speed01 : 0f, dt * 6f);
             airBlend = Mathf.MoveTowards(airBlend, grounded ? 0f : 1f, dt * 8f);
-            gaitPhase += Mathf.Abs(velocity.x) * dt / strideLength * Mathf.PI;
+            float spin = fighter.sword != null ? fighter.sword.SpinProgress : -1f;
+            float moveDir = Mathf.Abs(velocity.x) > 0.05f ? Mathf.Sign(velocity.x) : facing;
+
+            // Running forward turns the walk into a run; never in the air, backpedalling, kicking,
+            // spinning or flinching from a hit.
+            bool runAllowed = grounded && spin < 0f && fighter.KickProgress < 0f && moveDir == facing;
+            float flinchCalm = 1f - Mathf.Clamp01(flinch.magnitude / flinchSuppressDistance);
+            float runTarget = runAllowed ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(runStartSpeed, 1f, walkBlend)) * flinchCalm : 0f;
+            runBlend = Mathf.MoveTowards(runBlend, runTarget, dt * runBlendSpeed);
+
+            // The phase advances by distance, so the planted foot stays locked to the floor.
+            currentStride = Mathf.Lerp(strideLength, runStrideLength, runBlend);
+            gaitPhase += Mathf.Abs(velocity.x) * dt / currentStride * Mathf.PI;
 
             // Landing: knees absorb the impact proportionally to the fall speed.
             if (grounded && !wasGrounded)
@@ -379,8 +436,11 @@ namespace StickDuel
             float t = Time.time;
             float breathe = Mathf.Sin(t * 2.3f) * 0.012f;
             float sway = Mathf.Sin(t * 1.1f) * 0.02f * (1f - walkBlend) * (1f - airBlend);
-            float bob = -Mathf.Abs(Mathf.Sin(gaitPhase)) * 0.06f * walkBlend;
-            float spin = fighter.sword != null ? fighter.sword.SpinProgress : -1f;
+            // Walk: dip at mid-stance. Run: lowest at mid-stance, highest in the flight between steps.
+            float walkBob = -Mathf.Abs(Mathf.Sin(gaitPhase)) * 0.06f * walkBlend;
+            float halfCycle = Mathf.Repeat(gaitPhase / Mathf.PI, 1f);
+            float runBob = -Mathf.Cos((halfCycle - runStanceFraction) * Mathf.PI * 2f) * runBobDepth - runCrouch;
+            float bob = Mathf.Lerp(walkBob, runBob, runBlend);
             spinScale = spin >= 0f ? Mathf.Cos(spin * Mathf.PI * 2f) : 1f;
             spinPivotX = hip.x;
             float spinCrouch = spin >= 0f ? Mathf.Sin(spin * Mathf.PI) * 0.12f : 0f;
@@ -388,7 +448,7 @@ namespace StickDuel
             Vector2 pelvis = hip + new Vector2(sway, bob + crouch - landDip);
 
             // Spine: lean into motion, away from hits, slightly forward in stance.
-            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
+            float targetLean = Mathf.Clamp(-velocity.x * 1.8f, -12f, 12f) - moveDir * runLeanDegrees * runBlend - flinch.x * 35f - facing * (2f + landDip * 40f) * (1f - airBlend);
             lean = Mathf.Clamp(Mathf.Lerp(lean, -targetLean, 1f - Mathf.Exp(-10f * dt)), -18f, 18f);
             // Kicking: the torso tips back to counterbalance the raised leg.
             Vector2 up = Rotate(Vector2.up, -(lean - facing * KickReach(fighter.KickProgress) * 24f));
@@ -439,8 +499,13 @@ namespace StickDuel
                 idle.y += (idle.x - hip.x) * slope;
 
                 float phase = gaitPhase + i * Mathf.PI;
-                float lift = Mathf.Max(0f, -Mathf.Sin(phase));
-                Vector2 walk = new Vector2(hip.x + Mathf.Cos(phase) * strideLength * 0.5f * moveDir, groundY + AnkleHeight + lift * 0.2f);
+                // Walk: cosine slide with a half-sine lift. Run: planted stance, heel kick, knee drive.
+                float walkLift = Mathf.Max(0f, -Mathf.Sin(phase));
+                Vector3 run = RunFoot(Mathf.Repeat(phase / (Mathf.PI * 2f), 1f), out bool runPlanted);
+                float along = Mathf.Lerp(Mathf.Cos(phase) * currentStride * 0.5f, run.x, runBlend);
+                float height = Mathf.Lerp(walkLift * 0.2f, run.y, runBlend);
+                float footAngle = Mathf.Lerp(walkLift * 35f, run.z, runBlend);
+                Vector2 walk = new Vector2(hip.x + along * moveDir, groundY + AnkleHeight + height);
                 walk.y += (walk.x - hip.x) * slope;
 
                 Vector2 air = hipJoint + new Vector2((isFront ? 0.24f : -0.12f) * facing, isFront ? -0.58f : -0.74f);
@@ -453,7 +518,7 @@ namespace StickDuel
                 Vector2 knee = SolveJoint(hipJoint, ref ankle, Thigh, Shin, facing);
 
                 // Toes point forward; they drop while the foot is lifted or in the air.
-                float toeDrop = (lift * walkBlend * 35f + airBlend * 50f) * Mathf.Deg2Rad;
+                float toeDrop = (footAngle * walkBlend + airBlend * 50f) * Mathf.Deg2Rad;
                 Vector2 toe = ankle + new Vector2(Mathf.Cos(toeDrop) * facing, -Mathf.Sin(toeDrop)) * FootLength;
                 if (isFront && kick >= 0f)
                 {
@@ -462,7 +527,7 @@ namespace StickDuel
                     toe = Vector2.Lerp(toe, ankle + sole * FootLength, KickReach(kick));
                 }
 
-                bool lifted = lift > 0.05f && walkBlend > 0.3f;
+                bool lifted = (runBlend > 0.5f ? !runPlanted : walkLift > 0.05f) && walkBlend > 0.3f;
                 if (footLifted[i] && !lifted && grounded && Fx.Instance != null)
                 {
                     Fx.Instance.Step(ankle, walkBlend);
@@ -473,6 +538,63 @@ namespace StickDuel
             }
         }
 
+        /// <summary>
+        /// One foot through a run cycle (<paramref name="cycle"/> 0..1, 0 = landing): x ahead of the
+        /// hip along the motion, y ankle height off the floor, z toe drop in degrees. On the floor
+        /// the foot slides back at exactly the body speed and the heel peels up for toe-off; in the
+        /// air it kicks up behind, drives forward under a high knee, reaches and lands.
+        /// </summary>
+        private Vector3 RunFoot(float cycle, out bool planted)
+        {
+            float travel = runStanceFraction * 2f * currentStride; // ground covered while this foot is down
+            float land = travel * runLandAhead;
+            float toeOff = land - travel;
+            float peelLift = Mathf.Sin(runToeOffAngle * Mathf.Deg2Rad) * FootLength; // ankle height that keeps the toe down
+
+            planted = cycle < runStanceFraction;
+            if (planted)
+            {
+                float t = cycle / runStanceFraction;
+                float peel = Mathf.SmoothStep(0f, 1f, (t - (1f - runHeelPeelShare)) / runHeelPeelShare);
+                float angle = peel * runToeOffAngle;
+                return new Vector3(Mathf.Lerp(land, toeOff, t), Mathf.Sin(angle * Mathf.Deg2Rad) * FootLength, angle);
+            }
+
+            RunSwingKeys[0] = new Vector4(0f, toeOff, peelLift, runToeOffAngle);
+            RunSwingKeys[1] = new Vector4(0.3f, -runHeelKickBack, runHeelKickHeight, 70f);
+            RunSwingKeys[2] = new Vector4(0.62f, runKneeDriveForward, runKneeDriveHeight, 35f);
+            RunSwingKeys[3] = new Vector4(0.85f, land + runReachPast, runReachHeight, -5f);
+            RunSwingKeys[4] = new Vector4(1f, land, 0f, 0f);
+            return Spline(RunSwingKeys, (cycle - runStanceFraction) / (1f - runStanceFraction));
+        }
+
+        // Swing keys: (time, x, y, toe angle). Times and toe angles shape the swing; distances are fields.
+        private static readonly Vector4[] RunSwingKeys = new Vector4[5];
+
+        /// <summary>Smooth curve through timed keys (x = time, yzw = value), Catmull-Rom style tangents.</summary>
+        private static Vector3 Spline(Vector4[] keys, float time)
+        {
+            int k = 0;
+            while (k < keys.Length - 2 && time > keys[k + 1].x)
+            {
+                k++;
+            }
+
+            Vector4 a = keys[k], b = keys[k + 1];
+            float span = b.x - a.x;
+            float u = Mathf.Clamp01((time - a.x) / span);
+            Vector3 Tangent(int i)
+            {
+                Vector4 before = keys[Mathf.Max(i - 1, 0)], after = keys[Mathf.Min(i + 1, keys.Length - 1)];
+                return new Vector3(after.y - before.y, after.z - before.z, after.w - before.w) / (after.x - before.x) * span;
+            }
+
+            var p0 = new Vector3(a.y, a.z, a.w);
+            var p1 = new Vector3(b.y, b.z, b.w);
+            float u2 = u * u, u3 = u2 * u;
+            return (2f * u3 - 3f * u2 + 1f) * p0 + (u3 - 2f * u2 + u) * Tangent(k) + (-2f * u3 + 3f * u2) * p1 + (u3 - u2) * Tangent(k + 1);
+        }
+
         private void DrawArms(Vector2 frontShoulder, Vector2 backShoulder, int facing, float dt)
         {
             Sword sword = fighter.sword;
@@ -480,12 +602,24 @@ namespace StickDuel
 
             // Sword hand rides on the hilt (interpolated transform = what is drawn). If the drawn
             // shoulder is a bit off, stretch the arm slightly rather than leave a gap.
-            Vector2 grip = held ? (Vector2)sword.transform.position : frontShoulder + new Vector2(facing * 0.3f, -0.6f);
+            // Running, the arms pump opposite the legs: the far arm with the near leg, and back.
+            float pump = Mathf.Cos((Mathf.Repeat(gaitPhase / (Mathf.PI * 2f), 1f) + armPumpLead) * Mathf.PI * 2f);
+            Vector2 unarmed = Vector2.Lerp(frontShoulder + new Vector2(facing * 0.3f, -0.6f), PumpHand(frontShoulder, -pump, facing), runBlend);
+            Vector2 grip = held ? (Vector2)sword.transform.position : unarmed;
             if (!held)
             {
                 // Unarmed jab: the fist shoots out towards the aim and comes back.
                 Vector2 jab = frontShoulder + fighter.PunchDirection * (UpperArm + Forearm) * 0.97f;
                 grip = Vector2.Lerp(grip, jab, fighter.PunchExtension);
+            }
+
+            if (held)
+            {
+                // Running, the drawn torso leans forward onto the sword and cramps the arm; settle the
+                // sword shoulder back so the arm extends, but never past swordArmMaxExtension. The
+                // sword itself (physics, hitbox) is untouched.
+                float slack = (UpperArm + Forearm) * swordArmMaxExtension - Vector2.Distance(frontShoulder, grip);
+                frontShoulder -= new Vector2(facing, 0f) * Mathf.Clamp(swordRunShoulderPullback * runBlend, 0f, Mathf.Max(0f, slack));
             }
 
             Vector2 hand = grip;
@@ -498,13 +632,15 @@ namespace StickDuel
 
             // Off hand: free (guard / balance) or on the pommel end of the hilt for a two-handed grip.
             float swing = Mathf.Cos(gaitPhase) * 0.2f * walkBlend;
-            Vector2 guard = backShoulder + new Vector2(-facing * (0.22f + swing), -0.55f);
+            Vector2 guard = Vector2.Lerp(backShoulder + new Vector2(-facing * (0.22f + swing), -0.55f), PumpHand(backShoulder, pump, facing), runBlend);
             Vector2 flail = backShoulder + new Vector2(-facing * 0.45f, 0.2f);
-            freeBackHand = Vector2.Lerp(freeBackHand, S(Vector2.Lerp(guard, flail, airBlend)), 1f - Mathf.Exp(-14f * dt));
+            float follow = Mathf.Lerp(14f, runArmFollowRate, runBlend);
+            freeBackHand = Vector2.Lerp(freeBackHand, S(Vector2.Lerp(guard, flail, airBlend)), 1f - Mathf.Exp(-follow * dt));
             backShoulder = S(backShoulder);
 
             Vector2 pommel = grip - (Vector2)(held ? sword.transform.right : Vector3.right) * 0.15f;
-            bool canTwoHand = held && !fighter.backGuard && airBlend < 0.5f && sword.SpinProgress < 0f
+            // At a run the off hand lets go of the pommel and pumps.
+            bool canTwoHand = held && !fighter.backGuard && airBlend < 0.5f && sword.SpinProgress < 0f && runBlend < 0.5f
                               && Vector2.Distance(backShoulder, pommel) < (UpperArm + Forearm) * 0.98f;
             twoHand = Mathf.MoveTowards(twoHand, canTwoHand ? 1f : 0f, dt * 6f);
 
@@ -512,6 +648,13 @@ namespace StickDuel
             Vector2 offElbow = SolveJoint(backShoulder, ref offHand, UpperArm, Forearm, -facing);
             backArm.Set(backShoulder, offElbow, offHand);
             backHand.Place(offHand);
+        }
+
+        /// <summary>Pumping hand: upper arm swung <paramref name="swing"/> (-1 back .. 1 forward), elbow bent.</summary>
+        private Vector2 PumpHand(Vector2 shoulder, float swing, int facing)
+        {
+            float upper = swing * armPumpAngle * facing;
+            return shoulder + Rotate(Vector2.down, upper) * UpperArm + Rotate(Vector2.down, upper + armPumpElbowBend * facing) * Forearm;
         }
 
         private void DrawHead(Vector2 center, Vector2 headUp, int facing, float dt)
@@ -581,6 +724,7 @@ namespace StickDuel
         private void DrawRoll(float progress, float dt)
         {
             spinScale = 1f;
+            runBlend = 0f;
             int dir = fighter.RollDirection;
             Vector2 hip = transform.position;
             Vector2 ground = new Vector2(hip.x, hip.y - Fighter.HipHeight);
@@ -640,6 +784,7 @@ namespace StickDuel
         private void DrawDead(float dt)
         {
             spinScale = 1f;
+            runBlend = 0f;
             Vector2 hip = transform.position;
             Vector2 up = transform.up;
             Vector2 side = transform.right;

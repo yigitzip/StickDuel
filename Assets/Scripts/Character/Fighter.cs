@@ -253,8 +253,9 @@ namespace StickDuel
             }
             else if (staggerTimer <= 0f && lungeTimer <= 0f)
             {
-                // Kicking plants the standing foot.
-                float target = canAct && kickTimer <= 0f ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
+                // Kicking plants the standing foot; a flying kick keeps the jump's momentum.
+                bool plantedKick = kickTimer > 0f && IsGrounded;
+                float target = canAct && !plantedKick ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
                 float accel = IsGrounded ? groundAcceleration : airAcceleration;
                 velocity.x = Mathf.MoveTowards(velocity.x, target, accel * dt);
             }

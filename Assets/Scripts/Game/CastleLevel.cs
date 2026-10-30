@@ -61,7 +61,8 @@ namespace StickDuel
 
         public static Color StoneColor => new Color(0.42f, 0.37f, 0.52f);
         // Procedural art, made once per session (pixel textures, tinted per use).
-        private static Sprite square, brick, block, arch, bars, glow, banner, crown, column, window, flame;
+        private static Sprite square, brick, block, arch, bars, glow, crown, sill, column, window, flame, torch;
+        private static readonly Sprite[] banners = new Sprite[3];
 
         /// <summary>Builds the castle. <paramref name="glowMaterial"/> (additive lantern glow) lights the torches when given.</summary>
         public static CastleLevel Build(Material glowMaterial = null)
@@ -118,18 +119,13 @@ namespace StickDuel
         {
             float y = floor * FloorHeight;
             float inner = FloorHeight - Slab;
-            // Round stone columns: fluted shaft, stepped base and capital, all shaded as cylinders.
+            // Stone block columns: stepped base, rough-cut drum stones, a gothic arcaded capital.
             var pillar = new Color(0.62f, 0.58f, 0.68f);
             for (float x = Tower; x <= Tower + RoomLength * 4f + 0.1f; x += 10f)
             {
-                Quad(root, "Shaft", new Vector2(x - 0.38f, y + 0.5f), new Vector2(0.76f, inner - 1.1f), pillar, -90, column);
-                Quad(root, "Plinth", new Vector2(x - 0.62f, y), new Vector2(1.24f, 0.22f), pillar * 0.8f, -89, column);
-                Quad(root, "Torus", new Vector2(x - 0.52f, y + 0.22f), new Vector2(1.04f, 0.28f), pillar * 0.9f, -89, column);
-                Quad(root, "Echinus", new Vector2(x - 0.52f, y + inner - 0.6f), new Vector2(1.04f, 0.3f), pillar * 0.9f, -89, column);
-                Quad(root, "Abacus", new Vector2(x - 0.66f, y + inner - 0.3f), new Vector2(1.32f, 0.3f), pillar * 0.8f, -89, column);
+                Quad(root, "Pillar", new Vector2(x - 0.75f, y), new Vector2(1.5f, inner), pillar, -90, column);
             }
 
-            Color[] cloth = { new Color(0.6f, 0.1f, 0.14f), new Color(0.16f, 0.25f, 0.55f), new Color(0.55f, 0.1f, 0.3f) };
             for (int slot = 0; slot < 4; slot++)
             {
                 float centre = Tower + slot * RoomLength + RoomLength * 0.5f;
@@ -138,23 +134,44 @@ namespace StickDuel
                     // Arched window onto the starry night, with a stone sill and a cold moonlit spill.
                     float wx = centre + side;
                     Quad(root, "Window", new Vector2(wx - 0.9f, y + 2.2f), new Vector2(1.8f, 3.6f), Color.white, -88, window);
-                    Quad(root, "Sill", new Vector2(wx - 1.05f, y + 2.05f), new Vector2(2.1f, 0.2f), pillar * 0.75f, -87, column);
+                    Quad(root, "Sill", new Vector2(wx - 1.05f, y + 2.05f), new Vector2(2.1f, 0.2f), pillar * 0.75f, -87, sill);
                     Glow(root, new Vector2(wx, y + 3.8f), 3.6f, new Color(0.45f, 0.55f, 1f, 0.14f), glowMaterial);
+
+                    // Snow falling past the glass, hidden outside the arch (straight sides, round top).
+                    var arch = new Vector2(wx, y + 4.9f);
+                    System.Func<Vector2, bool> glass = p => p.y > y + 2.4f &&
+                        (p.y <= arch.y ? Mathf.Abs(p.x - wx) < 0.66f : (p - arch).magnitude < 0.66f);
+                    for (int i = 0; i < 30; i++)
+                    {
+                        float size = 0.035f + Hash(i, slot) * 0.03f;
+                        var flake = Quad(root, "Snow", new Vector2(wx, y + 3f), Vector2.one * size, new Color(1f, 1f, 1f, 0.85f), -87).AddComponent<Drift>();
+                        flake.Velocity = new Vector2(0f, -0.3f - Hash(slot, i) * 0.3f);
+                        flake.Sway = 0.06f;
+                        flake.Box = new Rect(wx - 0.7f, y + 2.3f, 1.4f, 3.3f);
+                        flake.Visible = glass;
+                    }
                 }
 
-                // Wall torch between the windows: iron bracket, wooden haft, a live flame and its warm light.
-                Quad(root, "Bracket", new Vector2(centre - 0.3f, y + 2.85f), new Vector2(0.6f, 0.12f), new Color(0.12f, 0.1f, 0.1f), -86);
-                Quad(root, "Plate", new Vector2(centre - 0.14f, y + 2.6f), new Vector2(0.28f, 0.5f), new Color(0.16f, 0.13f, 0.13f), -87);
-                Quad(root, "Haft", new Vector2(centre - 0.07f, y + 2.7f), new Vector2(0.14f, 0.9f), new Color(0.42f, 0.26f, 0.14f), -85);
-                Quad(root, "Cup", new Vector2(centre - 0.16f, y + 3.5f), new Vector2(0.32f, 0.16f), new Color(0.2f, 0.16f, 0.14f), -84);
-                Quad(root, "Flame", new Vector2(centre - 0.25f, y + 3.6f), new Vector2(0.5f, 0.75f), Color.white, -83, flame).AddComponent<Flicker>();
-                Glow(root, new Vector2(centre, y + 3.9f), 1.4f, new Color(1f, 0.85f, 0.5f, 0.7f), glowMaterial).AddComponent<Flicker>();
-                Glow(root, new Vector2(centre, y + 3.9f), 6f, new Color(1f, 0.55f, 0.2f, 0.45f), glowMaterial).AddComponent<Flicker>();
+                // Wall torch between the windows: the painted torch, a live flame, drifting embers and its warm light.
+                Quad(root, "Torch", new Vector2(centre - 0.34f, y + 2.05f), new Vector2(0.68f, 1.65f), Color.white, -85, torch);
+                Quad(root, "Flame", new Vector2(centre - 0.3f, y + 3.58f), new Vector2(0.6f, 0.85f), Color.white, -83, flame).AddComponent<Flicker>();
+                for (int i = 0; i < 9; i++)
+                {
+                    // Embers rise off the flame, sway and burn out.
+                    var ember = Quad(root, "Ember", new Vector2(centre, y + 4.2f), Vector2.one * 0.05f, new Color(1f, 0.6f, 0.2f), -82).AddComponent<Drift>();
+                    ember.Velocity = new Vector2(0f, 0.35f + Hash(slot * 9 + i, floor) * 0.35f);
+                    ember.Sway = 0.08f;
+                    ember.Box = new Rect(centre - 0.15f, y + 4.1f, 0.3f, 1.1f);
+                    ember.FadeOut = true;
+                }
 
-                // Banners hang from the ceiling either side of the torch.
+                Glow(root, new Vector2(centre, y + 4f), 1.6f, new Color(1f, 0.85f, 0.5f, 0.7f), glowMaterial).AddComponent<Flicker>();
+                Glow(root, new Vector2(centre, y + 4f), 6f, new Color(1f, 0.55f, 0.2f, 0.45f), glowMaterial).AddComponent<Flicker>();
+
+                // Banners hang on rods, corded to a nail under the ceiling, either side of the torch.
                 foreach (float side in new[] { -3.5f, 3.5f })
                 {
-                    Quad(root, "Banner", new Vector2(centre + side - 0.5f, y + inner - 2.6f), new Vector2(1f, 2.6f), cloth[floor], -83, banner);
+                    Quad(root, "Banner", new Vector2(centre + side - 0.7f, y + inner - 3.46f), new Vector2(1.4f, 3.36f), Color.white, -83, banners[floor]);
                 }
             }
         }
@@ -273,14 +290,18 @@ namespace StickDuel
                 float a = Mathf.Clamp01(1f - d);
                 return new Color(1f, 1f, 1f, a * a);
             }), new Rect(0, 0, 64, 64), Vector2.zero, 64f);
-            banner = Sprite.Create(Paint(16, 48, (x, y) =>
+            // One cloth per floor: courtyard red, rampart blue, palace crimson.
+            Color[] cloth = { new Color(0.62f, 0.1f, 0.15f), new Color(0.16f, 0.25f, 0.58f), new Color(0.56f, 0.1f, 0.32f) };
+            for (int f = 0; f < 3; f++)
             {
-                if (y < 8 && Mathf.Abs(x - 7.5f) < 8 - y) return Color.clear; // swallowtail notch
-                bool trim = x < 2 || x > 13 || y > 44;
-                bool emblem = Mathf.Abs(x - 7.5f) + Mathf.Abs(y - 28f) < 4f;
-                return trim || emblem ? new Color(1f, 0.85f, 0.45f) : Color.white;
-            }), new Rect(0, 0, 16, 48), Vector2.zero, 16f);
-            column = Sprite.Create(Smooth(Paint(32, 8, (x, y) =>
+                banners[f] = Banner(cloth[f]);
+            }
+
+            column = Pillar();
+            var torchArt = Resources.Load<Texture2D>("Castle/Torch"); // painted, flameless; the fire is drawn below
+            torchArt.filterMode = FilterMode.Point;
+            torch = Sprite.Create(torchArt, new Rect(0, 0, torchArt.width, torchArt.height), Vector2.zero, 60f);
+            sill = Sprite.Create(Smooth(Paint(32, 8, (x, y) =>
             {
                 // Cylinder lit from the upper left, with vertical flutes.
                 float u = (x + 0.5f) / 32f * 2f - 1f;
@@ -304,27 +325,13 @@ namespace StickDuel
                     return joint ? stone * 0.55f : stone * (Mathf.FloorToInt(angle) % 2 == 0 ? 1f : 0.85f);
                 }
 
-                // Leaded glass onto the night: a vertical mullion and a transom, then sky and stars.
+                // Leaded glass onto the night: a vertical mullion and a transom, then dark sky (the snow falls in front).
                 if (Mathf.Abs(x - 31.5f) < 1.5f || Mathf.Abs(y - 70f) < 1.2f) return new Color(0.1f, 0.08f, 0.12f);
                 float t = y / 128f;
                 Color sky = Color.Lerp(new Color(0.12f, 0.16f, 0.36f), new Color(0.04f, 0.05f, 0.14f), t);
-                if (Hash(x, y) > 0.985f) sky = Color.Lerp(sky, Color.white, 0.8f);
                 return sky;
             })), new Rect(0, 0, 64, 128), Vector2.zero, 32f);
-            flame = Sprite.Create(Smooth(Paint(32, 48, (x, y) =>
-            {
-                // Teardrop: white-hot core, yellow, orange, red rim.
-                float u = (x + 0.5f - 16f) / 16f;
-                float v = (y + 0.5f) / 48f;
-                float half = Mathf.Sin(Mathf.Clamp01(v * 1.15f) * Mathf.PI) * (1f - v * 0.65f);
-                float d = Mathf.Abs(u) / Mathf.Max(half, 0.001f);
-                if (d > 1f || v > 0.98f) return Color.clear;
-                float heat = (1f - d) * (1f - v * 0.7f);
-                Color c = heat > 0.55f ? Color.Lerp(new Color(1f, 0.85f, 0.4f), new Color(1f, 1f, 0.9f), (heat - 0.55f) / 0.45f)
-                    : Color.Lerp(new Color(0.9f, 0.25f, 0.08f), new Color(1f, 0.6f, 0.15f), heat / 0.55f);
-                c.a = Mathf.Clamp01((1f - d) * 3f);
-                return c;
-            })), new Rect(0, 0, 32, 48), Vector2.zero, 32f);
+            flame = Sprite.Create(Paint(48, 60, FlamePixel), new Rect(0, 0, 48, 60), Vector2.zero, 60f); // same pixel size as the torch art
             crown = Sprite.Create(Paint(32, 24, (x, y) =>
             {
                 if (y < 8) return Color.white;
@@ -332,6 +339,111 @@ namespace StickDuel
                 return y < 24 - tooth * 2.2f ? Color.white : Color.clear;
             }), new Rect(0, 0, 32, 24), Vector2.zero, 32f);
         }
+
+        /// <summary>Hanging banner: crenellated top on a wooden rod, corded to a nail, gold inner trim, pointed tail.</summary>
+        private static Sprite Banner(Color cloth)
+        {
+            var gold = new Color(0.95f, 0.72f, 0.25f);
+            var wood = new Color(0.36f, 0.22f, 0.14f);
+            var iron = new Color(0.32f, 0.32f, 0.36f);
+            return Sprite.Create(Paint(40, 96, (x, y) => Opaque(BannerPixel(x, y))), new Rect(0, 0, 40, 96), Vector2.zero, 32f);
+
+            Color BannerPixel(int x, int y)
+            {
+                // Nail and the cord running down to both rod ends.
+                if (new Vector2(x - 19.5f, y - 92.5f).sqrMagnitude < 4f) return iron;
+                float t = (92f - y) / 14f;
+                if (t >= 0f && t <= 1f && Mathf.Abs(Mathf.Abs(x - 19.5f) - t * 16.5f) < 0.7f) return iron * 0.8f;
+
+                // Rod with round knobs, sitting on the cloth's battlements.
+                if (y >= 74 && y <= 77 && x >= 2 && x <= 37) return wood * (y == 77 ? 1.3f : 1f);
+                if (new Vector2(Mathf.Min(x - 2f, 37f - x), y - 75.5f).sqrMagnitude < 5f) return wood * 1.2f;
+
+                float tail = 22f * (1f - Mathf.Abs(x - 19.5f) / 14f); // bottom edge, a V down to a point
+                bool merlon = y < 74 || (y <= 80 && (x - 6) / 4 % 2 == 0);
+                if (x < 6 || x > 33 || y < tail || !merlon) return Color.clear;
+
+                float d = Mathf.Min(Mathf.Min(x - 6f, 33f - x), Mathf.Min((y - tail) * 0.54f, 73f - y));
+                if (d < 1f && y < 74) return cloth * 0.55f;
+                if (d >= 2.5f && d < 3.6f) return gold;
+                float fold = 0.88f + 0.12f * Mathf.Sin((x - 6f) * 0.45f) - (x < 11 ? 0.12f : 0f);
+                return cloth * fold;
+            }
+        }
+
+        /// <summary>Pixel-art fire: a wide base and three licking tongues, banded red, orange, yellow, pale core.</summary>
+        private static Color FlamePixel(int x, int y)
+        {
+            float v = (y + 0.5f) / 60f;
+            float u = (x + 0.5f - 24f) / 24f - Mathf.Sin(v * 5f) * 0.08f * v;
+            float height = Mathf.Max(Mathf.Max(
+                Tongue(u, 0.02f, 0.32f, 0.98f), Tongue(u, -0.36f, 0.2f, 0.8f)),
+                Mathf.Max(Tongue(u, 0.4f, 0.18f, 0.68f), 0.55f * Mathf.Clamp01((0.75f - Mathf.Abs(u)) * 5f)));
+            if (v > height || Mathf.Abs(u) > 0.45f + v * 1.6f) return Color.clear; // rounded base
+            float heat = (1f - v / height) * 0.65f + (1f - Mathf.Abs(u) / 0.9f) * 0.45f;
+            if (heat > 0.95f) return new Color(1f, 0.95f, 0.7f);
+            if (heat > 0.6f) return new Color(1f, 0.8f, 0.25f);
+            if (heat > 0.35f) return new Color(1f, 0.5f, 0.1f);
+            return new Color(0.85f, 0.2f, 0.05f);
+        }
+
+        private static float Tongue(float u, float centre, float width, float height)
+        {
+            float d = (u - centre) / width;
+            return height * Mathf.Exp(-d * d);
+        }
+
+        /// <summary>Full-height column: stepped base, rough drum stones lit as a cylinder, gothic arcaded capital.</summary>
+        private static Sprite Pillar()
+        {
+            const int width = 48, height = 204;
+            return Sprite.Create(Paint(width, height, (x, y) =>
+            {
+                float u = (x + 0.5f) / width * 2f - 1f;
+                float light = 0.78f + 0.22f * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u)) - 0.18f * u;
+                float c = 23.5f, dx = Mathf.Abs(x - c);
+
+                // Stepped base: two courses of blocks, the lower one wider.
+                if (y < 16)
+                {
+                    float halfBase = y < 8 ? 24f : 20.5f;
+                    if (dx > halfBase) return Color.clear;
+                    bool joint = y % 8 == 7 || (x + (y < 8 ? 0 : 6)) % 12 == 0;
+                    return Grey(joint ? 0.45f : (0.82f + (Hash(x / 12, y / 8) - 0.5f) * 0.12f) * light);
+                }
+
+                // Abacus slab and capital: a bell widening upwards, carved with pointed arches.
+                if (y >= 196) return Grey((y == height - 1 ? 0.95f : 0.8f) * light);
+                if (y >= 168)
+                {
+                    float halfCap = y < 176 ? 18f : Mathf.Lerp(18f, 22.5f, (y - 176f) / 20f);
+                    if (dx > halfCap) return Color.clear;
+                    if (y < 176) return Grey((y == 175 || y == 168 ? 0.55f : 0.8f) * light);
+                    float ax = ((x - (int)(c - halfCap)) % 10) - 4.5f;     // position in one arch bay
+                    float ay = y - 178f;
+                    bool inside = ay >= 0f && ay < 14f - ax * ax * 0.28f && Mathf.Abs(ax) < 3.5f;
+                    bool rib = !inside && ay >= -1f && ay < 15.5f - ax * ax * 0.28f && Mathf.Abs(ax) < 4.6f;
+                    return Grey((inside ? 0.42f : rib ? 0.95f : 0.75f) * light);
+                }
+
+                // Shaft: courses of rough-cut stones, some split in two, each with its own shade and a few cracks.
+                if (dx > 16.5f) return Color.clear;
+                int row = (y - 16) / 14, inRow = (y - 16) % 14;
+                int split = Hash(row, 7) > 0.45f ? 10 + (int)(Hash(row, 3) * 14f) : -1;
+                int stone = split >= 0 && x >= 7 + split ? 1 : 0;
+                if (inRow == 0 || (split >= 0 && x == 7 + split)) return Grey(0.38f);
+                float shade = 0.78f + (Hash(row, stone) - 0.5f) * 0.18f;
+                if (inRow == 13) shade += 0.1f;                                  // top edge catches the light
+                if (inRow == 1) shade -= 0.08f;
+                if (Hash(x + row * 31, y) > 0.985f || Hash(x - y + row, row) > 0.993f) shade -= 0.2f; // cracks and pits
+                return Grey(shade * light + (Hash(x * 7, y * 3) - 0.5f) * 0.04f);
+            }), new Rect(0, 0, width, height), Vector2.zero, 32f);
+        }
+
+        private static Color Grey(float v) => new Color(v, v, v);
+
+        /// <summary>Shading multiplies alpha too; painted art is either fully there or clear.</summary>
+        private static Color Opaque(Color c) => new Color(c.r, c.g, c.b, c.a > 0f ? 1f : 0f);
 
         private static Texture2D Smooth(Texture2D texture)
         {
