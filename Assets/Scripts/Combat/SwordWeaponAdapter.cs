@@ -4,28 +4,31 @@ using UnityEngine;
 namespace StickDuel
 {
     /// <summary>
-    /// <see cref="IWeaponBehaviour"/> facade over the existing <see cref="Sword"/>. It only forwards
-    /// calls; all blade behaviour (swing, parry, thrust, spin, hits, trail) stays in Sword.
-    /// Fighter, the drivers and the rig still talk to <see cref="Fighter.sword"/> directly.
+    /// <see cref="IWeaponBehaviour"/> facade for weapons that ride on the existing <see cref="Sword"/>
+    /// (swing, parry, thrust, spin, hits, trail all stay in Sword). A subclass only picks the
+    /// <see cref="Weapon"/> preset: sprite, reach, hitbox and stats, applied with
+    /// <see cref="Sword.Equip(Weapon)"/>. Fighter, the drivers and the rig still talk to
+    /// <see cref="Fighter.sword"/> directly.
     /// </summary>
     [RequireComponent(typeof(Sword))]
-    public sealed class SwordWeaponAdapter : MonoBehaviour, IWeaponBehaviour
+    public abstract class SwordRigWeapon : MonoBehaviour, IWeaponBehaviour
     {
         private Sword sword;
 
         public Sword Sword => sword != null ? sword : sword = GetComponent<Sword>();
-        public WeaponType Type => WeaponType.Sword;
+        public abstract WeaponType Type { get; }
+        /// <summary>Applied to the Sword on <see cref="Equip"/>.</summary>
+        protected abstract Weapon Preset { get; }
         public Fighter Owner => IsEquipped ? Sword.Owner : null;
         public bool IsEquipped { get; private set; }
         public bool IsAttacking => Sword.IsFlying || (Sword.IsHeld && (Sword.IsThrusting || Sword.SpinProgress >= 0f));
 
-        /// <summary>Same as the old direct call: katana stats via <see cref="Sword.Equip(Weapon)"/>.</summary>
         public void Equip(Fighter owner)
         {
             if (owner == null) throw new ArgumentNullException(nameof(owner));
             Sword.Owner = owner;
             if (!gameObject.activeSelf) gameObject.SetActive(true);
-            Sword.Equip(Weapon.Katana);
+            Sword.Equip(Preset);
             IsEquipped = true;
         }
 
@@ -35,5 +38,12 @@ namespace StickDuel
             IsEquipped = false;
             gameObject.SetActive(false);
         }
+    }
+
+    /// <summary>The katana, exactly as before: <see cref="Sword.Equip(Weapon)"/> with <see cref="Weapon.Katana"/>.</summary>
+    public sealed class SwordWeaponAdapter : SwordRigWeapon
+    {
+        public override WeaponType Type => WeaponType.Sword;
+        protected override Weapon Preset => Weapon.Katana;
     }
 }

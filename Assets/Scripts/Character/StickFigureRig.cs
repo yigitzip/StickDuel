@@ -74,8 +74,8 @@ namespace StickDuel
         [SerializeField, Range(-0.25f, 0.25f)] private float armPumpLead = 0.05f;
         [Tooltip("How quickly the free hand follows its target while running (walk uses 14).")]
         [SerializeField, Min(1f)] private float runArmFollowRate = 30f;
-        [Header("Spear jab pose (visual only)")]
-        [Tooltip("At full jab extension the knees bend this much more and the torso drives forward this many degrees.")]
+        [Header("Two-handed attack pose (visual only)")]
+        [Tooltip("At full drive (spear jab, axe strike) the knees bend this much more and the torso leans forward this many degrees; a wind-up leans back.")]
         [SerializeField] private float jabCrouch = 0.06f;
         [SerializeField, Range(0f, 25f)] private float jabLeanForward = 12f;
         [Tooltip("While running with a sword, the drawn sword shoulder settles back by up to this much so the arm extends.")]
@@ -544,8 +544,8 @@ namespace StickDuel
             float speed01 = Mathf.Clamp01(Mathf.Abs(velocity.x) / Mathf.Max(0.01f, fighter.MoveSpeed));
             walkBlend = Mathf.MoveTowards(walkBlend, grounded ? speed01 : 0f, dt * 6f);
             airBlend = Mathf.MoveTowards(airBlend, grounded ? 0f : 1f, dt * 8f);
-            SpearWeapon heldSpear = fighter.spear != null && fighter.spear.IsHeld ? fighter.spear : null;
-            float spin = fighter.sword != null ? fighter.sword.SpinProgress : heldSpear != null ? heldSpear.SpinProgress : -1f;
+            HeldWeapon held = fighter.heldWeapon != null && fighter.heldWeapon.IsHeld ? fighter.heldWeapon : null;
+            float spin = fighter.sword != null ? fighter.sword.SpinProgress : held != null ? held.SpinProgress : -1f;
             float moveDir = Mathf.Abs(velocity.x) > 0.05f ? Mathf.Sign(velocity.x) : facing;
 
             // Running forward turns the walk into a run; never in the air, backpedalling, kicking,
@@ -584,7 +584,7 @@ namespace StickDuel
             spinScale = spin >= 0f ? Mathf.Cos(spin * Mathf.PI * 2f) : 1f;
             spinPivotX = hip.x;
             float spinCrouch = spin >= 0f ? Mathf.Sin(spin * Mathf.PI) * 0.12f : 0f;
-            float jab = heldSpear != null ? heldSpear.JabExtension : 0f;
+            float jab = held != null ? held.PoseLean : 0f; // +1 driving forward, -1 rearing back
             float crouch = -0.025f * (1f - walkBlend) * (1f - airBlend) - spinCrouch - jabCrouch * jab * (1f - airBlend);
             Vector2 pelvis = hip + new Vector2(sway, bob + crouch - landDip);
 
@@ -738,10 +738,10 @@ namespace StickDuel
 
         private void DrawArms(Vector2 frontShoulder, Vector2 backShoulder, int facing, float dt)
         {
-            SpearWeapon spear = fighter.spear;
-            if (spear != null && spear.IsHeld)
+            HeldWeapon spear = fighter.heldWeapon;
+            if (spear != null && spear.IsHeld && spear.TwoHanded)
             {
-                // Both hands on the shaft: the near arm on the lead hand, the far arm on the rear hand by the butt.
+                // Both hands on the handle: the near arm on the lead hand, the far arm on the rear hand.
                 // Through a spin the elbows flip with the body (at edge-on, where it can't be seen).
                 int bend = spinScale < 0f ? -facing : facing;
                 PlaceArm(frontArm, frontHand, S(frontShoulder), spear.LeadHand, bend);
@@ -751,14 +751,16 @@ namespace StickDuel
             }
 
             Sword sword = fighter.sword;
-            bool held = sword != null && sword.IsHeld;
+            bool swordHeld = sword != null && sword.IsHeld;
+            HeldWeapon oneHanded = spear != null && spear.IsHeld ? spear : null; // two-handed returned above
+            bool held = swordHeld || oneHanded != null;
 
             // Sword hand rides on the hilt (interpolated transform = what is drawn). If the drawn
             // shoulder is a bit off, stretch the arm slightly rather than leave a gap.
             // Running, the arms pump opposite the legs: the far arm with the near leg, and back.
             float pump = Mathf.Cos((Mathf.Repeat(gaitPhase / (Mathf.PI * 2f), 1f) + armPumpLead) * Mathf.PI * 2f);
             Vector2 unarmed = Vector2.Lerp(frontShoulder + new Vector2(facing * 0.3f, -0.6f), PumpHand(frontShoulder, -pump, facing), runBlend);
-            Vector2 grip = held ? (Vector2)sword.transform.position : unarmed;
+            Vector2 grip = oneHanded != null ? oneHanded.RearHand : swordHeld ? (Vector2)sword.transform.position : unarmed;
             if (!held)
             {
                 // Unarmed jab: the fist shoots out towards the aim and comes back.
@@ -791,9 +793,9 @@ namespace StickDuel
             freeBackHand = Vector2.Lerp(freeBackHand, S(Vector2.Lerp(guard, flail, airBlend)), 1f - Mathf.Exp(-follow * dt));
             backShoulder = S(backShoulder);
 
-            Vector2 pommel = grip - (Vector2)(held ? sword.transform.right : Vector3.right) * 0.15f;
-            // At a run the off hand lets go of the pommel and pumps.
-            bool canTwoHand = held && !fighter.backGuard && airBlend < 0.5f && sword.SpinProgress < 0f && runBlend < 0.5f
+            Vector2 pommel = grip - (Vector2)(swordHeld ? sword.transform.right : Vector3.right) * 0.15f;
+            // At a run the off hand lets go of the pommel and pumps. One-handed weapons keep it free.
+            bool canTwoHand = swordHeld && !fighter.backGuard && airBlend < 0.5f && sword.SpinProgress < 0f && runBlend < 0.5f
                               && Vector2.Distance(backShoulder, pommel) < (UpperArm + Forearm) * 0.98f;
             twoHand = Mathf.MoveTowards(twoHand, canTwoHand ? 1f : 0f, dt * 6f);
 
@@ -926,15 +928,15 @@ namespace StickDuel
             // on the hilt while the blade is held.
             Sword sword = fighter.sword;
             Vector2 frontShoulder = J(0.24f, 1.07f, 0.02f, 0.2f);
-            SpearWeapon spear = fighter.spear != null && fighter.spear.IsHeld ? fighter.spear : null;
-            Vector2 hand = sword != null && sword.IsHeld ? (Vector2)sword.transform.position : spear != null ? spear.LeadHand : J(0.55f, 0.5f, 0.18f, -0.14f);
+            HeldWeapon spear = fighter.heldWeapon != null && fighter.heldWeapon.IsHeld ? fighter.heldWeapon : null;
+            Vector2 hand = sword != null && sword.IsHeld ? (Vector2)sword.transform.position : spear != null ? (spear.TwoHanded ? spear.LeadHand : spear.RearHand) : J(0.55f, 0.5f, 0.18f, -0.14f);
             float stretch = Mathf.Max(1f, Vector2.Distance(frontShoulder, hand) / (UpperArm + Forearm - 0.002f));
             Vector2 elbow = SolveJoint(frontShoulder, ref hand, UpperArm * stretch, Forearm * stretch, -dir);
             frontArm.Set(frontShoulder, elbow, hand);
             frontHand.Place(hand);
 
             Vector2 backShoulder = J(0.2f, 1.07f, -0.02f, 0.2f);
-            Vector2 offHand = spear != null ? spear.RearHand : J(0.42f, 0.42f, 0.12f, -0.2f);
+            Vector2 offHand = spear != null && spear.TwoHanded ? spear.RearHand : J(0.42f, 0.42f, 0.12f, -0.2f);
             float offStretch = Mathf.Max(1f, Vector2.Distance(backShoulder, offHand) / (UpperArm + Forearm - 0.002f));
             Vector2 offElbow = SolveJoint(backShoulder, ref offHand, UpperArm * offStretch, Forearm * offStretch, -dir);
             backArm.Set(backShoulder, offElbow, offHand);

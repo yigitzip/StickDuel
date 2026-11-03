@@ -75,8 +75,8 @@ namespace StickDuel
 
         [Header("Parts")]
         public Sword sword;
-        /// <summary>Set by <see cref="SpearWeapon.Equip"/>, which also hides the sword and clears <see cref="sword"/>.</summary>
-        [NonSerialized] public SpearWeapon spear;
+        /// <summary>Weapon with its own physics (spear, axe); set by <see cref="HeldWeapon.Equip"/>, which also hides the sword and clears <see cref="sword"/>.</summary>
+        [NonSerialized] public HeldWeapon heldWeapon;
         public StickFigureRig rig;
         public Collider2D headCollider;
 
@@ -523,9 +523,9 @@ namespace StickDuel
                 sword.Drop();
             }
 
-            if (spear != null)
+            if (heldWeapon != null)
             {
-                spear.Drop();
+                heldWeapon.Drop();
             }
 
             Died?.Invoke(this);
@@ -566,9 +566,9 @@ namespace StickDuel
                 sword.Regrip();
             }
 
-            if (spear != null)
+            if (heldWeapon != null)
             {
-                spear.Regrip();
+                heldWeapon.Regrip();
             }
 
             if (rig != null)

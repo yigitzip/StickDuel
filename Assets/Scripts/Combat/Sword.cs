@@ -653,6 +653,9 @@ namespace StickDuel
             recoveryAfterHit = defaultRecovery * weapon.Recovery;
         }
 
+        /// <summary>Knocked aside by a heavier weapon (the axe's guard): the same reel as a lost parry.</summary>
+        public void Deflect(float seconds) => Stagger(seconds);
+
         private void Stagger(float seconds)
         {
             staggerTimer = Mathf.Max(staggerTimer, seconds);

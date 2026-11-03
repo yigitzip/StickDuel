@@ -5,8 +5,8 @@ namespace StickDuel
 {
     /// <summary>
     /// Prepares the <see cref="IWeaponBehaviour"/> for a <see cref="WeaponType"/> on a fighter
-    /// (get-or-add, so calling it again is safe): the sword adapter on the fighter's Sword, a new
-    /// spear object for the spear, skeleton components for the rest. It does not equip; the caller does.
+    /// (get-or-add, so calling it again is safe): the sword adapter (katana or laser sword preset) on the fighter's Sword, a new
+    /// weapon object for the spear, axe and mace, skeleton components for the rest. It does not equip; the caller does.
     /// </summary>
     public static class WeaponFactory
     {
@@ -17,17 +17,19 @@ namespace StickDuel
             switch (type)
             {
                 case WeaponType.Sword:
+                case WeaponType.LaserSword:
                     if (owner.sword == null)
                     {
-                        Debug.LogError($"WeaponFactory: {owner.name} has no Sword to adapt.", owner);
+                        Debug.LogError($"WeaponFactory: {owner.name} has no Sword rig for {type}.", owner);
                         return null;
                     }
 
-                    return GetOrAdd<SwordWeaponAdapter>(owner.sword.gameObject);
-                case WeaponType.Spear: return owner.spear != null ? owner.spear : SpearWeapon.Create(owner);
-                case WeaponType.Axe: return GetOrAdd<AxeWeapon>(owner.gameObject);
+                    GameObject rig = owner.sword.gameObject;
+                    return type == WeaponType.Sword ? GetOrAdd<SwordWeaponAdapter>(rig) : GetOrAdd<LaserSwordWeapon>(rig);
+                case WeaponType.Spear: return owner.heldWeapon is SpearWeapon spear ? spear : SpearWeapon.Create(owner);
+                case WeaponType.Axe: return owner.heldWeapon is AxeWeapon axe ? axe : AxeWeapon.Create(owner);
                 case WeaponType.Bow: return GetOrAdd<BowWeapon>(owner.gameObject);
-                case WeaponType.Mace: return GetOrAdd<MaceWeapon>(owner.gameObject);
+                case WeaponType.Mace: return owner.heldWeapon is MaceWeapon mace ? mace : MaceWeapon.Create(owner);
                 case WeaponType.SniperRifle: return GetOrAdd<SniperRifleWeapon>(owner.gameObject);
                 default:
                     Debug.LogError($"WeaponFactory: unknown weapon type {(int)type}.", owner);

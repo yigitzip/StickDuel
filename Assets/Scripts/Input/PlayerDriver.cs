@@ -16,7 +16,6 @@ namespace StickDuel
 
         [Header("Sword Throw")]
         [SerializeField, Min(0f)] private float swordThrowSpeed = 14f;
-        [SerializeField, Min(0f)] private float spearThrowSpeed = 17f;
         [Tooltip("Walking this close (from the hip) to the fallen sword picks it up.")]
         [SerializeField, Min(0.1f)] private float swordPickupRange = 1.2f;
 
@@ -93,7 +92,7 @@ namespace StickDuel
                 thrust |= keyboard.leftShiftKey.isPressed;
                 if (keyboard.qKey.wasPressedThisFrame) fighter.Roll(-1);
                 if (keyboard.eKey.wasPressedThisFrame) fighter.Roll(1);
-                if (keyboard.fKey.wasPressedThisFrame && fighter.spear != null) fighter.spear.TrySpin();
+                if (keyboard.fKey.wasPressedThisFrame && fighter.heldWeapon != null) fighter.heldWeapon.TrySpin();
             }
 
             Gamepad gamepad = Gamepad.current;
@@ -198,9 +197,9 @@ namespace StickDuel
                 return;
             }
 
-            if (fighter.spear != null && fighter.spear.IsHeld)
+            if (fighter.heldWeapon != null && fighter.heldWeapon.IsHeld)
             {
-                fighter.spear.Throw(ThrowDirection() * spearThrowSpeed);
+                fighter.heldWeapon.Throw(ThrowDirection() * fighter.heldWeapon.ThrowSpeed);
             }
             else if (sword != null && sword.IsHeld)
             {
@@ -214,13 +213,13 @@ namespace StickDuel
 
         private void PickUpSword()
         {
-            SpearWeapon spear = fighter.spear;
-            if (spear != null && !spear.IsHeld && !spear.IsFlying && fighter.ControlsEnabled && !fighter.IsDead)
+            HeldWeapon held = fighter.heldWeapon;
+            if (held != null && !held.IsHeld && !held.IsFlying && fighter.ControlsEnabled && !fighter.IsDead)
             {
                 Vector2 hip = fighter.Body.position;
-                if (Vector2.Distance(spear.ClosestPoint(hip), hip) <= swordPickupRange)
+                if (Vector2.Distance(held.ClosestPoint(hip), hip) <= swordPickupRange)
                 {
-                    spear.Regrip();
+                    held.Regrip();
                 }
 
                 return;

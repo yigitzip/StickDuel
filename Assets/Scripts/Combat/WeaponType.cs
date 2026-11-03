@@ -9,25 +9,37 @@ namespace StickDuel
         Bow,
         Mace,
         SniperRifle,
+        LaserSword,
     }
 
     /// <summary>Menu data per <see cref="WeaponType"/>. Only playable types can be selected.</summary>
     public static class WeaponTypeInfo
     {
         /// <summary>
-        /// True when the type has a working gameplay behaviour (Sword, Spear). The others are
+        /// True when the type has a working gameplay behaviour (Sword, Spear, Axe, Mace, LaserSword). The others are
         /// skeletons (see <see cref="WeaponBehaviourBase"/>) and show as locked in the menu.
         /// </summary>
-        public static bool IsPlayable(WeaponType type) => type == WeaponType.Sword || type == WeaponType.Spear;
+        public static bool IsPlayable(WeaponType type) => type == WeaponType.Sword || type == WeaponType.Spear || type == WeaponType.Axe || type == WeaponType.Mace || type == WeaponType.LaserSword;
 
-        public static string DisplayName(WeaponType type) => type == WeaponType.SniperRifle ? "SNIPER RIFLE" : type.ToString().ToUpperInvariant();
+        public static string DisplayName(WeaponType type)
+        {
+            switch (type)
+            {
+                case WeaponType.SniperRifle: return "SNIPER RIFLE";
+                case WeaponType.LaserSword: return "LASER SWORD";
+                default: return type.ToString().ToUpperInvariant();
+            }
+        }
 
         public static string Blurb(WeaponType type)
         {
             switch (type)
             {
                 case WeaponType.Sword: return "Balanced and fast";
-                case WeaponType.Spear: return "Two hands, long reach, the point kills";
+                case WeaponType.Spear: return "Long reach, only the point cuts";
+                case WeaponType.Axe: return "Heavy chops, SHIFT slam, F leap";
+                case WeaponType.Mace: return "Crushing blows, SHIFT slam, F leap";
+                case WeaponType.LaserSword: return "Katana moves, burns deeper";
                 default: return "Coming soon";
             }
         }

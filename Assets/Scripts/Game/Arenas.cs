@@ -144,7 +144,7 @@ namespace StickDuel
             foreach (Text text in FindObjectsByType<Text>(FindObjectsSortMode.None))
             {
                 text.text = text.text.Replace("W / SPACE  jump    Q / E  roll", "W  jump    SPACE  kick    Q / E  roll    ESC  menu")
-                    .Replace("HOLD SHIFT  thrust", "SHIFT  thrust    F  spear spin");
+                    .Replace("HOLD SHIFT  thrust", "SHIFT  thrust / chop    F  special");
             }
 
             SetControls(false);
@@ -552,24 +552,27 @@ namespace StickDuel
             UiText(menu.transform, font, "CHOOSE YOUR WEAPON", 34, new Vector2(0f, 310f), Color.white);
             Sprite katana = duel.Player.sword.GetComponent<SpriteRenderer>().sprite;
             var weaponTypes = (WeaponType[])System.Enum.GetValues(typeof(WeaponType));
+            // The row must fit a 16:10 screen too (about 1800 reference units wide), so the cards shrink with the count.
+            float spacing = Mathf.Min(290f, 1700f / weaponTypes.Length);
+            float cardWidth = spacing - 24f;
             for (int i = 0; i < weaponTypes.Length; i++)
             {
                 WeaponType type = weaponTypes[i];
                 bool playable = WeaponTypeInfo.IsPlayable(type);
                 string name = WeaponTypeInfo.DisplayName(type);
                 Color color = playable ? new Color(0.16f, 0.13f, 0.22f) : new Color(0.1f, 0.09f, 0.12f);
-                Image card = Card(name, new Vector2((i - (weaponTypes.Length - 1) * 0.5f) * 290f, 165f), new Vector2(260f, 210f), color, () => SelectWeapon(type));
+                Image card = Card(name, new Vector2((i - (weaponTypes.Length - 1) * 0.5f) * spacing, 165f), new Vector2(cardWidth, 210f), color, () => SelectWeapon(type));
                 card.GetComponent<Button>().interactable = playable; // locked: coming soon
                 if (playable)
                 {
-                    Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 30f), new Vector2(230f, 110f));
-                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : katana;
+                    Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 34f), new Vector2(cardWidth - 20f, 100f));
+                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : katana;
                     picture.preserveAspect = true;
                     picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
                 }
 
-                UiText(card.transform, font, name, 30, new Vector2(0f, -48f), playable ? Color.white : new Color(1f, 1f, 1f, 0.4f));
-                UiText(card.transform, font, WeaponTypeInfo.Blurb(type), 19, new Vector2(0f, -80f), new Color(1f, 1f, 1f, playable ? 0.65f : 0.35f));
+                UiText(card.transform, font, name, cardWidth >= 250f ? 30 : 24, new Vector2(0f, -40f), playable ? Color.white : new Color(1f, 1f, 1f, 0.4f));
+                UiText(card.transform, font, WeaponTypeInfo.Blurb(type), 16, new Vector2(0f, -78f), new Color(1f, 1f, 1f, playable ? 0.65f : 0.35f), cardWidth - 16f);
                 weaponOutlines.Add(card.GetComponent<Outline>());
             }
 
@@ -661,7 +664,8 @@ namespace StickDuel
             return image;
         }
 
-        private static void UiText(Transform parent, Font font, string value, int size, Vector2 position, Color color)
+        /// <summary>Centred label; with a <paramref name="width"/> it wraps inside it instead of overflowing.</summary>
+        private static void UiText(Transform parent, Font font, string value, int size, Vector2 position, Color color, float width = 0f)
         {
             var go = new GameObject(value, typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -672,9 +676,13 @@ namespace StickDuel
             text.color = color;
             text.alignment = TextAnchor.MiddleCenter;
             text.raycastTarget = false;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.horizontalOverflow = width > 0f ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.rectTransform.anchoredPosition = position;
+            if (width > 0f)
+            {
+                text.rectTransform.sizeDelta = new Vector2(width, text.rectTransform.sizeDelta.y);
+            }
         }
     }
 }
