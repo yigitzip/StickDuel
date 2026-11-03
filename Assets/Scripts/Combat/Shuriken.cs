@@ -42,6 +42,10 @@ namespace StickDuel
             => origin + velocity * t + 0.5f * gravity * t * t * Vector2.down;
 
         public static void Launch(Fighter owner, Vector2 position, Vector2 velocity, float gravity, float damage)
+            => Launch(owner, position, velocity, gravity, damage, Icon, Kunai != null);
+
+        /// <summary>Any projectile on the shuriken's flight and hit rules: an arrow is one that flies point first.</summary>
+        public static void Launch(Fighter owner, Vector2 position, Vector2 velocity, float gravity, float damage, Sprite look, bool pointFirst)
         {
             var go = new GameObject("Shuriken");
             go.transform.position = position;
@@ -54,9 +58,9 @@ namespace StickDuel
             shuriken.damage = damage;
 
             var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = Icon;
+            renderer.sprite = look;
             renderer.sortingOrder = 20;
-            shuriken.pointFirst = Kunai != null;
+            shuriken.pointFirst = pointFirst;
         }
 
         private void Update()

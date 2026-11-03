@@ -16,10 +16,10 @@ namespace StickDuel
     public static class WeaponTypeInfo
     {
         /// <summary>
-        /// True when the type has a working gameplay behaviour (Sword, Spear, Axe, Mace, LaserSword). The others are
+        /// True when the type has a working gameplay behaviour (all but SniperRifle). The rest are
         /// skeletons (see <see cref="WeaponBehaviourBase"/>) and show as locked in the menu.
         /// </summary>
-        public static bool IsPlayable(WeaponType type) => type == WeaponType.Sword || type == WeaponType.Spear || type == WeaponType.Axe || type == WeaponType.Mace || type == WeaponType.LaserSword;
+        public static bool IsPlayable(WeaponType type) => type != WeaponType.SniperRifle;
 
         public static string DisplayName(WeaponType type)
         {
@@ -40,6 +40,7 @@ namespace StickDuel
                 case WeaponType.Axe: return "Heavy chops, SHIFT slam, F leap";
                 case WeaponType.Mace: return "Crushing blows, SHIFT slam, F leap";
                 case WeaponType.LaserSword: return "Katana moves, burns deeper";
+                case WeaponType.Bow: return "Hold LEFT CLICK to draw, release to shoot";
                 default: return "Coming soon";
             }
         }

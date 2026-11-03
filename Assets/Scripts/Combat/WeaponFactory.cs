@@ -6,7 +6,7 @@ namespace StickDuel
     /// <summary>
     /// Prepares the <see cref="IWeaponBehaviour"/> for a <see cref="WeaponType"/> on a fighter
     /// (get-or-add, so calling it again is safe): the sword adapter (katana or laser sword preset) on the fighter's Sword, a new
-    /// weapon object for the spear, axe and mace, skeleton components for the rest. It does not equip; the caller does.
+    /// weapon object for the spear, axe, mace and bow, a skeleton components for the rest. It does not equip; the caller does.
     /// </summary>
     public static class WeaponFactory
     {
@@ -28,7 +28,7 @@ namespace StickDuel
                     return type == WeaponType.Sword ? GetOrAdd<SwordWeaponAdapter>(rig) : GetOrAdd<LaserSwordWeapon>(rig);
                 case WeaponType.Spear: return owner.heldWeapon is SpearWeapon spear ? spear : SpearWeapon.Create(owner);
                 case WeaponType.Axe: return owner.heldWeapon is AxeWeapon axe ? axe : AxeWeapon.Create(owner);
-                case WeaponType.Bow: return GetOrAdd<BowWeapon>(owner.gameObject);
+                case WeaponType.Bow: return owner.heldWeapon is BowWeapon bow ? bow : BowWeapon.Create(owner);
                 case WeaponType.Mace: return owner.heldWeapon is MaceWeapon mace ? mace : MaceWeapon.Create(owner);
                 case WeaponType.SniperRifle: return GetOrAdd<SniperRifleWeapon>(owner.gameObject);
                 default:

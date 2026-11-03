@@ -169,6 +169,14 @@ namespace StickDuel
                 return;
             }
 
+            // With a bow in hand the left button draws it instead of throwing shuriken.
+            if (fighter.heldWeapon is BowWeapon bow && bow.IsHeld)
+            {
+                bow.DrawHeld = mouse.leftButton.isPressed;
+                charging = false;
+                return;
+            }
+
             if (mouse.leftButton.wasPressedThisFrame && shurikenCount > 0)
             {
                 charging = true;
@@ -245,25 +253,28 @@ namespace StickDuel
             return aim.sqrMagnitude > 0.0001f ? aim.normalized : Vector2.right * fighter.Facing;
         }
 
-        /// <summary>Aim line: exactly where the shuriken will go if released now.</summary>
+        /// <summary>Aim line: exactly where the shuriken (or a drawn arrow) will go if released now.</summary>
         private void LateUpdate()
         {
-            aimLine.enabled = charging;
-            if (!charging)
+            var bow = fighter.heldWeapon as BowWeapon;
+            bool drawingBow = bow != null && bow.IsHeld && bow.IsDrawing;
+            aimLine.enabled = charging || drawingBow;
+            if (!aimLine.enabled)
             {
                 return;
             }
 
-            float charge = Charge01;
-            // Sample the same arc the shuriken will fly, up to where it hits the ground.
-            Vector2 start = fighter.ShoulderPosition;
-            Vector2 velocity = ThrowDirection() * ThrowSpeed;
+            float charge = drawingBow ? bow.Draw : Charge01;
+            // Sample the same arc the projectile will fly, up to where it hits the ground.
+            Vector2 start = drawingBow ? bow.ArrowOrigin : fighter.ShoulderPosition;
+            Vector2 velocity = drawingBow ? bow.ArrowVelocity : ThrowDirection() * ThrowSpeed;
+            float gravity = drawingBow ? bow.ArrowGravity : throwGravity;
             arc[0] = start;
             int count = 1;
             while (count < arc.Length)
             {
                 Vector2 previous = arc[count - 1];
-                Vector2 point = Shuriken.PositionAt(start, velocity, throwGravity, count * 0.03f);
+                Vector2 point = Shuriken.PositionAt(start, velocity, gravity, count * 0.03f);
                 RaycastHit2D hit = Physics2D.Linecast(previous, point, groundMask);
                 arc[count++] = hit.collider != null ? hit.point : point;
                 if (hit.collider != null)

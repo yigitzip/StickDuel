@@ -566,7 +566,7 @@ namespace StickDuel
                 if (playable)
                 {
                     Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 34f), new Vector2(cardWidth - 20f, 100f));
-                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : katana;
+                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : type == WeaponType.Bow ? BowWeapon.Art : katana;
                     picture.preserveAspect = true;
                     picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
                 }

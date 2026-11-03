@@ -52,7 +52,7 @@ namespace StickDuel
         public bool IsFlying => flying;
         public abstract bool IsAttacking { get; }
         /// <summary>Rear hand, near the end of the handle (interpolated transform = what is drawn).</summary>
-        public Vector2 RearHand => transform.position;
+        public virtual Vector2 RearHand => transform.position;
         /// <summary>Lead hand, further up the handle (two-handed weapons only).</summary>
         public abstract Vector2 LeadHand { get; }
         /// <summary>False: only <see cref="RearHand"/> holds it (the grip) and the off hand stays free, like with the katana.</summary>
@@ -71,6 +71,8 @@ namespace StickDuel
         /// <summary>The trail runs during attacks; <see cref="CritTrail"/> makes it red and wide.</summary>
         protected abstract bool TrailOn { get; }
         protected virtual bool CritTrail => false;
+        /// <summary>A fast-moving striking point also draws the trail (off for weapons that don't swing).</summary>
+        protected virtual bool SwingTrail => true;
         private Vector2 BodyTip => body.position + (Vector2)(Quaternion.Euler(0f, 0f, body.rotation) * (Vector3)tipLocal);
 
         /// <summary>Weapon-specific special move (F). False when the weapon has none or can't now.</summary>
@@ -356,7 +358,7 @@ namespace StickDuel
                 trail.widthMultiplier = crit ? 1.6f : 1f; // BladeTrail reads > 1 as the wide spin ribbon
             }
 
-            trail.emitting = flying || (IsHeld && (TrailOn || tipVelocity.magnitude > 7f));
+            trail.emitting = flying || (IsHeld && (TrailOn || (SwingTrail && tipVelocity.magnitude > 7f)));
         }
 
         protected void Tired()
