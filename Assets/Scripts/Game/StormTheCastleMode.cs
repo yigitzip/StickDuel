@@ -6,14 +6,15 @@ using UnityEngine.InputSystem;
 namespace StickDuel
 {
     /// <summary>
-    /// Survival = storm the castle (CastleLevel) and take the crown. Walking into the next room
+    /// Storm The Castle: climb the castle (CastleLevel) and take the crown. Walking into the next room
     /// spawns its guards (clones of the scene's enemy) in front of the player; the room's gate opens
     /// when they are all down. Dying sends you back to the last room you entered, at full health.
     /// No slow motion and no banners between fights: the game keeps flowing. Drives DuelManager's
     /// HUD in place of its match flow (DuelManager.RunMatch = false). Added by Arenas; a scene
-    /// reload removes it, the castle and every guard.
+    /// reload removes it, the castle and every guard. (The other run mode, <see cref="EndlessSurvivalMode"/>,
+    /// shares nothing but the HUD hooks and <see cref="Bots.Clone"/>.)
     /// </summary>
-    public sealed class SurvivalMode : MonoBehaviour
+    public sealed class StormTheCastleMode : MonoBehaviour
     {
         private const float CorpseLifetime = 3f;
         private const float CrownReach = 1.2f;
@@ -265,17 +266,8 @@ namespace StickDuel
         /// <summary>Clones the template enemy as a guard of <paramref name="room"/>.</summary>
         private Fighter Spawn(char tier, Vector2 position, CastleLevel.Room room)
         {
-            // The template is inactive, so the clones are too: wire them up before their Awake runs.
-            Fighter guard = Instantiate(template);
-            Sword sword = Instantiate(template.sword);
-            // Rig and blade trail build their pieces as children at Awake; drop the template's copies.
-            KeepOnly(guard.transform, template.headCollider.name);
-            KeepOnly(sword.transform, "Edge", "Tip");
-            guard.sword = sword;
-            sword.Owner = guard;
-
-            guard.isGuard = true;
-            guard.opponent = duel.Player;
+            Fighter guard = Bots.Clone(template, duel.Player);
+            Sword sword = guard.sword;
             switch (tier)
             {
                 case 'b': // the Guard Captain
@@ -313,18 +305,6 @@ namespace StickDuel
             guard.ResetFighter(position);
             guard.ControlsEnabled = true;
             return guard;
-        }
-
-        private static void KeepOnly(Transform parent, params string[] names)
-        {
-            for (int i = parent.childCount - 1; i >= 0; i--)
-            {
-                GameObject child = parent.GetChild(i).gameObject;
-                if (System.Array.IndexOf(names, child.name) < 0)
-                {
-                    DestroyImmediate(child);
-                }
-            }
         }
 
         private IEnumerator Fell()

@@ -49,7 +49,20 @@ namespace StickDuel
             public float MotesLifetime = 6f;
             public bool Icicles;                       // stalactites drop from the ceiling
             public float[] Pieces = new float[0];      // volcano: centre x of each sinking floor piece
+            /// <summary>Endless scroller: Texture repeats sideways forever, with Texture + "_road" as its ground layer.</summary>
+            public bool Endless;
+            /// <summary>Painting width in pixels (the endless battlefield is wider than the 1600 px arenas).</summary>
+            public float Width = PaintingWidth;
+            /// <summary>Endless: the painting columns the background tile spans (its mirror seams; keep them clear of tents and the like).</summary>
+            public float TileLeft, TileRight = PaintingWidth;
+            /// <summary>Endless: painting row where the road layer starts (Tools/prepare_backgrounds.py ROAD_CUT).</summary>
+            public float RoadCut;
+            /// <summary>Endless: the background is drawn this much smaller (pinned at the road's edge) so it looks further away.</summary>
+            public float BackgroundScale = 1f;
         }
+
+        /// <summary>How far the endless battlefield's floor reaches either way (hours of walking).</summary>
+        public const float EndlessReach = 100000f;
 
         private static readonly Arena[] All =
         {
@@ -87,6 +100,14 @@ namespace StickDuel
             },
         };
 
+        /// <summary>Endless Survival's ground: a torched war camp, not offered as a duel arena.</summary>
+        private static readonly Arena Battlefield = new Arena
+        {
+            Name = "BATTLEFIELD", Blurb = "Hold the line", Texture = "Bg_battlefield", GroundRow = 718f, Endless = true,
+            Width = 2105f, TileLeft = 179f, TileRight = 1668f, // ultrawide; the seams sit clear of the tents
+            RoadCut = 670f, BackgroundScale = 0.8f,
+        };
+
         // Kept across Esc reloads so the menu remembers the last choice.
         private static readonly PlayerLoadout loadout = new PlayerLoadout();
         private static int selectedMap;
@@ -101,7 +122,9 @@ namespace StickDuel
         private readonly List<Outline> weaponOutlines = new List<Outline>();
         private readonly List<Outline> mapOutlines = new List<Outline>();
         private readonly List<Outline> modeOutlines = new List<Outline>();
-        private bool survival; // per scene load: Esc always comes back to Duel
+        private enum Mode { Duel, StormTheCastle, Endless }
+
+        private Mode mode; // per scene load: Esc always comes back to Duel
 
         public static Arenas Instance { get; private set; }
 
@@ -198,10 +221,17 @@ namespace StickDuel
             Fight();
         }
 
-        /// <summary>Skips the menu straight into Survival (used by the editor test bridge).</summary>
+        /// <summary>Skips the menu straight into Storm The Castle (used by the editor test bridge).</summary>
         public void StartSurvival()
         {
-            SelectMode(true);
+            SelectMode(Mode.StormTheCastle);
+            Fight();
+        }
+
+        /// <summary>Skips the menu straight into Endless Survival (used by the editor test bridge).</summary>
+        public void StartEndless()
+        {
+            SelectMode(Mode.Endless);
             Fight();
         }
 
@@ -214,27 +244,32 @@ namespace StickDuel
 
             Destroy(menu);
             menu = null;
-            CastleLevel castle = survival ? BuildCastle() : null;
-            if (!survival)
+            bool castleRun = mode == Mode.StormTheCastle;
+            CastleLevel castle = castleRun ? BuildCastle() : null;
+            if (!castleRun)
             {
-                Build(All[selectedMap]);
+                Build(mode == Mode.Endless ? Battlefield : All[selectedMap]);
             }
 
             Fighter player = duel.Player;
             Fighter enemy = duel.Enemy;
-            if (player.sword != null) WeaponFactory.Prepare(survival ? WeaponType.Sword : loadout.Weapon, player)?.Equip(player);
+            if (player.sword != null) WeaponFactory.Prepare(castleRun ? WeaponType.Sword : loadout.Weapon, player)?.Equip(player);
             if (enemy.sword != null) WeaponFactory.Prepare(WeaponType.Sword, enemy)?.Equip(enemy);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 ai.ArenaHalfWidth = HalfWidth;
             }
 
-            if (survival && duel.GetComponent<SurvivalMode>() == null)
+            if (castleRun && duel.GetComponent<StormTheCastleMode>() == null)
             {
-                duel.gameObject.AddComponent<SurvivalMode>().Init(duel, castle);
+                duel.gameObject.AddComponent<StormTheCastleMode>().Init(duel, castle);
+            }
+            else if (mode == Mode.Endless && duel.GetComponent<EndlessSurvivalMode>() == null)
+            {
+                duel.gameObject.AddComponent<EndlessSurvivalMode>().Init(duel, EndlessReach);
             }
 
-            duel.enabled = true; // its Start kicks off the match (or just the HUD, in Survival)
+            duel.enabled = true; // its Start kicks off the match (or just the HUD, in a run mode)
         }
 
         private static void SetControls(bool enabled)
@@ -253,6 +288,11 @@ namespace StickDuel
         {
             environment.SetActive(false);
             var root = new GameObject(arena.Name).transform;
+            if (arena.Endless)
+            {
+                BuildEndless(root, arena);
+                return;
+            }
 
             var texture = Resources.Load<Texture2D>("Arena/" + arena.Texture);
             var background = new GameObject("Background").AddComponent<SpriteRenderer>();
@@ -308,6 +348,36 @@ namespace StickDuel
             {
                 BuildLavaSea(root, arena);
             }
+        }
+
+        /// <summary>
+        /// Endless scroller: the painting repeats sideways forever in two layers (the road cut-out fixed
+        /// to the ground, the whole painting behind it sliding slowly), one floor reaching
+        /// <see cref="EndlessReach"/> either way, no walls, and a camera free to follow sideways.
+        /// </summary>
+        private void BuildEndless(Transform root, Arena arena)
+        {
+            HideSceneSky();
+            // The background hangs from the road's top edge, so shrinking it never opens a gap above the road.
+            float roadEdge = (arena.GroundRow - arena.RoadCut) / PixelsPerUnit;
+            InfiniteBackdrop.Create(root, "Background", Painting(arena.Texture, arena, arena.TileLeft, arena.TileRight, arena.RoadCut), 0.9f, -101,
+                arena.BackgroundScale, roadEdge);
+            InfiniteBackdrop.Create(root, "Road", Painting(arena.Texture + "_road", arena, 0f, arena.Width), 0f, -100);
+            Box(root, "Floor", new Vector2(-EndlessReach, 0f), EndlessReach, 8f);
+            if (cam != null)
+            {
+                float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit; // same zoom limit as the arenas
+                cam.GetComponent<CameraRig>().SetBounds(EndlessReach, halfView / Mathf.Max(cam.aspect, 0.5f));
+            }
+        }
+
+        /// <summary>Painting columns <paramref name="left"/>..<paramref name="right"/> (never the mirrored side padding, so tiles meet edge to edge), pivot on the ground row (or <paramref name="pivotRow"/>).</summary>
+        private static Sprite Painting(string texture, Arena arena, float left, float right, float pivotRow = -1f)
+        {
+            var image = Resources.Load<Texture2D>("Arena/" + texture);
+            float groundFromBottom = image.height - PadTop - (pivotRow >= 0f ? pivotRow : arena.GroundRow);
+            return Sprite.Create(image, new Rect(PadSide + left, 0f, right - left, image.height),
+                new Vector2(0.5f, groundFromBottom / image.height), PixelsPerUnit);
         }
 
         /// <summary>The Survival castle (graybox), in place of a painted arena.</summary>
@@ -590,29 +660,36 @@ namespace StickDuel
                 mapOutlines.Add(card.GetComponent<Outline>());
             }
 
-            Image fight = Card("Fight", new Vector2(0f, -410f), new Vector2(360f, 86f), new Color(0.85f, 0.25f, 0.2f), Fight);
+            Image fight = Card("Fight", new Vector2(560f, -410f), new Vector2(300f, 86f), new Color(0.85f, 0.25f, 0.2f), Fight);
             fight.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.5f);
             UiText(fight.transform, font, "FIGHT!", 46, Vector2.zero, Color.white);
             UiText(menu.transform, font, "Enter to fight      Esc in game returns here", 22, new Vector2(0f, -490f), new Color(1f, 1f, 1f, 0.5f));
 
-            for (int i = 0; i < 2; i++)
+            // Modes left to centre, FIGHT on the right (cards are built in Mode order).
+            (Mode mode, string title, string blurb)[] modes =
             {
-                bool isSurvival = i == 1;
-                Image card = Card(isSurvival ? "Survival" : "Duel", new Vector2(isSurvival ? 450f : -450f, -410f), new Vector2(300f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(isSurvival));
-                UiText(card.transform, font, isSurvival ? "SURVIVAL" : "DUEL", 34, new Vector2(0f, 12f), Color.white);
-                UiText(card.transform, font, isSurvival ? "Storm the castle, take the crown" : "Best of five", 18, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f));
+                (Mode.Duel, "DUEL", "Best of five"),
+                (Mode.StormTheCastle, "STORM THE CASTLE", "Climb the castle, take the crown"),
+                (Mode.Endless, "ENDLESS SURVIVAL", "Hold out against the horde"),
+            };
+            for (int i = 0; i < modes.Length; i++)
+            {
+                Mode pick = modes[i].mode;
+                Image card = Card(modes[i].title, new Vector2(-620f + i * 310f, -410f), new Vector2(290f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(pick));
+                UiText(card.transform, font, modes[i].title, modes[i].title.Length > 8 ? 26 : 34, new Vector2(0f, 12f), Color.white);
+                UiText(card.transform, font, modes[i].blurb, 17, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f), 270f);
                 modeOutlines.Add(card.GetComponent<Outline>());
             }
 
             SelectWeapon(loadout.Weapon);
             SelectMap(selectedMap);
-            SelectMode(survival);
+            SelectMode(mode);
         }
 
-        private void SelectMode(bool isSurvival)
+        private void SelectMode(Mode pick)
         {
-            survival = isSurvival;
-            Highlight(modeOutlines, isSurvival ? 1 : 0);
+            mode = pick;
+            Highlight(modeOutlines, (int)pick);
         }
 
         private void SelectWeapon(WeaponType type)

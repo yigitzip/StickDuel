@@ -94,17 +94,21 @@ def icicle():
     return img.resize((64, 256), Image.LANCZOS)
 
 
-def pad(src):
-    img = Image.open(src).convert("RGB").resize((W, H), Image.LANCZOS)
+def pad(src, keep_aspect=False):
+    """keep_aspect: scale to height H at the painting's own aspect (the wide battlefield) instead of W x H."""
+    img = Image.open(src).convert("RGB")
+    width = round(H * img.width / img.height) if keep_aspect else W
+    img = img.resize((width, H), Image.LANCZOS)
     if src.endswith("ice.png"):
         img = close_ice_gap(img)
     if src.endswith("volcano.png"):
         img = volcano_without_ground(img)
-    out = Image.new("RGB", (W + PAD_SIDE * 2, H + PAD_TOP + PAD_BOTTOM))
+    W_ = img.width
+    out = Image.new("RGB", (W_ + PAD_SIDE * 2, H + PAD_TOP + PAD_BOTTOM))
     out.paste(img, (PAD_SIDE, PAD_TOP))
     # sides: mirror the outer strips
     out.paste(img.crop((0, 0, PAD_SIDE, H)).transpose(Image.FLIP_LEFT_RIGHT), (0, PAD_TOP))
-    out.paste(img.crop((W - PAD_SIDE, 0, W, H)).transpose(Image.FLIP_LEFT_RIGHT), (W + PAD_SIDE, PAD_TOP))
+    out.paste(img.crop((W_ - PAD_SIDE, 0, W_, H)).transpose(Image.FLIP_LEFT_RIGHT), (W_ + PAD_SIDE, PAD_TOP))
     full_w = out.width
     # top: the first rows stretched up and blurred into plain sky
     top = out.crop((0, PAD_TOP, full_w, PAD_TOP + 24)).resize((full_w, PAD_TOP), Image.BILINEAR)
@@ -115,10 +119,30 @@ def pad(src):
     return out
 
 
+ROAD_CUT, ROAD_FEATHER = 670, 10  # battlefield: the dirt road's top edge, just under the lowest spear tip (Arenas.cs RoadCut)
+
+
+def road_layer(padded):
+    """Battlefield road and nearest fences on their own, transparent above ROAD_CUT, for the endless
+    scroller: the road moves with the ground while the full painting behind it slides slowly."""
+    img = padded.convert("RGBA")
+    alpha = Image.new("L", img.size, 0)
+    top = PAD_TOP + ROAD_CUT
+    d = ImageDraw.Draw(alpha)
+    for i in range(ROAD_FEATHER):
+        d.line([(0, top + i), (img.width, top + i)], fill=int(255 * i / ROAD_FEATHER))
+    d.rectangle((0, top + ROAD_FEATHER, img.width, img.height), fill=255)
+    img.putalpha(alpha)
+    return img
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name in ("shrine", "isles", "volcano", "ice"):
         pad(os.path.join(REF, name + ".png")).save(os.path.join(OUT, "Bg_" + name + ".png"))
+    battlefield = pad(os.path.join(REF, "battlefield.png"), keep_aspect=True)  # ultrawide: 2105 x 893 painting
+    battlefield.save(os.path.join(OUT, "Bg_battlefield.png"))
+    road_layer(battlefield).save(os.path.join(OUT, "Bg_battlefield_road.png"))
     icicle().save(os.path.join(OUT, "Icicle.png"))
     volcano = Image.open(os.path.join(REF, "volcano.png")).convert("RGB")
     lava_sea(volcano).save(os.path.join(OUT, "LavaSea.png"))

@@ -46,7 +46,7 @@ namespace StickDuel
         public int EnemyScore => enemyScore;
         public Fighter Player => player;
         public Fighter Enemy => enemy;
-        /// <summary>Off = another mode (SurvivalMode) runs the flow; the HUD bars still update.</summary>
+        /// <summary>Off = a run mode (StormTheCastleMode, EndlessSurvivalMode) runs the flow; the HUD bars still update.</summary>
         public bool RunMatch { get; set; } = true;
 
         private void Start()
@@ -310,7 +310,7 @@ namespace StickDuel
             subText.enabled = false;
         }
 
-        /// <summary>Survival has no rounds: the pips go and the enemy's name slot shows the run instead.</summary>
+        /// <summary>The run modes have no rounds: the pips go and the enemy's name slot shows the run instead.</summary>
         public void ShowSurvivalLabel(string label)
         {
             foreach (Image pip in playerPips) pip.enabled = false;
@@ -318,7 +318,7 @@ namespace StickDuel
             enemyName.text = label;
         }
 
-        /// <summary>Survival bots fight without a health or stamina bar.</summary>
+        /// <summary>Run-mode bots fight without a health or stamina bar.</summary>
         public void HideEnemyBars()
         {
             enemyFill.parent.gameObject.SetActive(false);
