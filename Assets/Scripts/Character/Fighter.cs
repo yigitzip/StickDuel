@@ -75,6 +75,8 @@ namespace StickDuel
 
         [Header("Parts")]
         public Sword sword;
+        /// <summary>Set by <see cref="SpearWeapon.Equip"/>, which also hides the sword and clears <see cref="sword"/>.</summary>
+        [NonSerialized] public SpearWeapon spear;
         public StickFigureRig rig;
         public Collider2D headCollider;
 
@@ -255,8 +257,7 @@ namespace StickDuel
             {
                 // Kicking plants the standing foot; a flying kick keeps the jump's momentum.
                 bool plantedKick = kickTimer > 0f && IsGrounded;
-                float charging = sword != null && sword.IsHeld ? sword.MoveScale : 1f; // slow while chambering a thrust
-                float target = canAct && !plantedKick ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed * charging : 0f;
+                float target = canAct && !plantedKick ? Mathf.Clamp(moveInput, -1f, 1f) * moveSpeed : 0f;
                 float accel = IsGrounded ? groundAcceleration : airAcceleration;
                 velocity.x = Mathf.MoveTowards(velocity.x, target, accel * dt);
             }
@@ -311,7 +312,7 @@ namespace StickDuel
         }
 
         /// <summary>
-        /// Forward dash that carries a released thrust; speed and length grow with the charge.
+        /// Forward dash that carries a thrust or jab.
         /// Returns how long the dash lasts (0 when it cannot dash: in the air, staggered...).
         /// </summary>
         public float Lunge(float speedScale = 1f, float lengthScale = 1f)
@@ -490,7 +491,7 @@ namespace StickDuel
             staggerTimer = 0.18f + damage * 0.005f;
             if (sword != null)
             {
-                sword.CancelCharge(); // a hit knocks the chambered thrust out of you
+                sword.CancelThrust(); // a hit knocks the pulled-back thrust out of you
             }
 
             if (rig != null)
@@ -520,6 +521,11 @@ namespace StickDuel
             if (sword != null)
             {
                 sword.Drop();
+            }
+
+            if (spear != null)
+            {
+                spear.Drop();
             }
 
             Died?.Invoke(this);
@@ -558,6 +564,11 @@ namespace StickDuel
             if (sword != null)
             {
                 sword.Regrip();
+            }
+
+            if (spear != null)
+            {
+                spear.Regrip();
             }
 
             if (rig != null)

@@ -3,9 +3,12 @@ using UnityEngine;
 namespace StickDuel
 {
     /// <summary>
-    /// The weapons a fighter can carry. All of them reuse the katana's physics (see Sword) and
-    /// only change the look, reach, hitbox and how hard / how often they hit. Art lives in
-    /// Resources/Weapons (Tools/generate_weapons.py): pointing right, grip centre at x=48px.
+    /// Legacy sprite/stat presets for <see cref="Sword"/>. Only <see cref="Katana"/> is used
+    /// (by <see cref="SwordWeaponAdapter"/> and the castle sword sizing). The other entries in
+    /// <see cref="All"/> (SAW, CLUB, SPEAR, STONE AXE) are old experiments, no longer offered in
+    /// the menu and not the new gameplay weapons; selection now goes through
+    /// <see cref="WeaponType"/>. Remove this file once the Sword reads its katana stats elsewhere.
+    /// Art lives in Resources/Weapons (Tools/generate_weapons.py): pointing right, grip at x=48px.
     /// </summary>
     public sealed class Weapon
     {
@@ -57,6 +60,9 @@ namespace StickDuel
                 ThicknessPixels = 66f, CenterOffsetPixels = 19f, Damage = 1.55f, Knockback = 1.5f, HitCooldown = 1.2f, Recovery = 1.7f,
             },
         };
+
+        /// <summary>The katana preset the Sword is tuned for.</summary>
+        public static Weapon Katana => All[0];
 
         /// <summary>The weapon's sprite (null for the katana, which keeps the sword's own).</summary>
         public Sprite Sprite

@@ -119,7 +119,7 @@ namespace StickDuel.EditorTools
                     return "ok";
                 case "start":
                     if (Arenas.Instance == null) return "no Arenas";
-                    Arenas.Instance.StartWith(int.Parse(parts[1]), int.Parse(parts[2]));
+                    Arenas.Instance.StartWith((WeaponType)int.Parse(parts[1]), int.Parse(parts[2]));
                     return "ok";
                 case "survival":
                     if (Arenas.Instance == null) return "no Arenas";

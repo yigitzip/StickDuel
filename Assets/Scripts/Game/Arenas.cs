@@ -88,7 +88,7 @@ namespace StickDuel
         };
 
         // Kept across Esc reloads so the menu remembers the last choice.
-        private static int selectedWeapon;
+        private static readonly PlayerLoadout loadout = new PlayerLoadout();
         private static int selectedMap;
 
         private DuelManager duel;
@@ -143,7 +143,8 @@ namespace StickDuel
             // The saved scene still has the old controls hint (Space used to jump).
             foreach (Text text in FindObjectsByType<Text>(FindObjectsSortMode.None))
             {
-                text.text = text.text.Replace("W / SPACE  jump    Q / E  roll", "W  jump    SPACE  kick    Q / E  roll    ESC  menu");
+                text.text = text.text.Replace("W / SPACE  jump    Q / E  roll", "W  jump    SPACE  kick    Q / E  roll    ESC  menu")
+                    .Replace("HOLD SHIFT  thrust", "SHIFT  thrust    F  spear spin");
             }
 
             SetControls(false);
@@ -189,10 +190,10 @@ namespace StickDuel
             }
         }
 
-        /// <summary>Skips the menu (used by the editor test bridge).</summary>
-        public void StartWith(int weapon, int map)
+        /// <summary>Skips the menu (used by the editor test bridge). A locked weapon logs and keeps the last pick.</summary>
+        public void StartWith(WeaponType weapon, int map)
         {
-            selectedWeapon = Mathf.Clamp(weapon, 0, Weapon.All.Length - 1);
+            loadout.TrySelect(weapon);
             selectedMap = Mathf.Clamp(map, 0, All.Length - 1);
             Fight();
         }
@@ -221,8 +222,8 @@ namespace StickDuel
 
             Fighter player = duel.Player;
             Fighter enemy = duel.Enemy;
-            if (player.sword != null) player.sword.Equip(Weapon.All[survival ? 0 : selectedWeapon]);
-            if (enemy.sword != null) enemy.sword.Equip(Weapon.All[0]);
+            if (player.sword != null) WeaponFactory.Prepare(survival ? WeaponType.Sword : loadout.Weapon, player)?.Equip(player);
+            if (enemy.sword != null) WeaponFactory.Prepare(WeaponType.Sword, enemy)?.Equip(enemy);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 ai.ArenaHalfWidth = HalfWidth;
@@ -550,17 +551,25 @@ namespace StickDuel
             UiText(menu.transform, font, "STICK DUEL", 96, new Vector2(0f, 420f), new Color(1f, 0.85f, 0.4f));
             UiText(menu.transform, font, "CHOOSE YOUR WEAPON", 34, new Vector2(0f, 310f), Color.white);
             Sprite katana = duel.Player.sword.GetComponent<SpriteRenderer>().sprite;
-            for (int i = 0; i < Weapon.All.Length; i++)
+            var weaponTypes = (WeaponType[])System.Enum.GetValues(typeof(WeaponType));
+            for (int i = 0; i < weaponTypes.Length; i++)
             {
-                int index = i;
-                Weapon weapon = Weapon.All[i];
-                Image card = Card(weapon.Name, new Vector2((i - 2) * 300f, 165f), new Vector2(270f, 210f), new Color(0.16f, 0.13f, 0.22f), () => SelectWeapon(index));
-                Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 30f), new Vector2(230f, 110f));
-                picture.sprite = weapon.Sprite != null ? weapon.Sprite : katana;
-                picture.preserveAspect = true;
-                picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
-                UiText(card.transform, font, weapon.Name, 30, new Vector2(0f, -48f), Color.white);
-                UiText(card.transform, font, weapon.Blurb, 19, new Vector2(0f, -80f), new Color(1f, 1f, 1f, 0.65f));
+                WeaponType type = weaponTypes[i];
+                bool playable = WeaponTypeInfo.IsPlayable(type);
+                string name = WeaponTypeInfo.DisplayName(type);
+                Color color = playable ? new Color(0.16f, 0.13f, 0.22f) : new Color(0.1f, 0.09f, 0.12f);
+                Image card = Card(name, new Vector2((i - (weaponTypes.Length - 1) * 0.5f) * 290f, 165f), new Vector2(260f, 210f), color, () => SelectWeapon(type));
+                card.GetComponent<Button>().interactable = playable; // locked: coming soon
+                if (playable)
+                {
+                    Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 30f), new Vector2(230f, 110f));
+                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : katana;
+                    picture.preserveAspect = true;
+                    picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
+                }
+
+                UiText(card.transform, font, name, 30, new Vector2(0f, -48f), playable ? Color.white : new Color(1f, 1f, 1f, 0.4f));
+                UiText(card.transform, font, WeaponTypeInfo.Blurb(type), 19, new Vector2(0f, -80f), new Color(1f, 1f, 1f, playable ? 0.65f : 0.35f));
                 weaponOutlines.Add(card.GetComponent<Outline>());
             }
 
@@ -592,7 +601,7 @@ namespace StickDuel
                 modeOutlines.Add(card.GetComponent<Outline>());
             }
 
-            SelectWeapon(selectedWeapon);
+            SelectWeapon(loadout.Weapon);
             SelectMap(selectedMap);
             SelectMode(survival);
         }
@@ -603,10 +612,10 @@ namespace StickDuel
             Highlight(modeOutlines, isSurvival ? 1 : 0);
         }
 
-        private void SelectWeapon(int index)
+        private void SelectWeapon(WeaponType type)
         {
-            selectedWeapon = index;
-            Highlight(weaponOutlines, index);
+            loadout.TrySelect(type);
+            Highlight(weaponOutlines, (int)loadout.Weapon); // cards are built in enum order
         }
 
         private void SelectMap(int index)

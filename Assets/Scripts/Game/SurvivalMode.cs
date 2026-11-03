@@ -77,12 +77,12 @@ namespace StickDuel
 
         /// <summary>
         /// Resources/Castle/Sword: pointing right, grip centre at x=80px on the blade axis (mid
-        /// height), tip at x=503px. Scaled so the tip lands where the katana's does (Weapon.All[0]).
+        /// height), tip at x=503px. Scaled so the tip lands where the katana's does (Weapon.Katana).
         /// </summary>
         private static Sprite CastleSwordSprite()
         {
             const float gripPixel = 80f, tipPixel = 503f;
-            Weapon katana = Weapon.All[0];
+            Weapon katana = Weapon.Katana;
             var texture = Resources.Load<Texture2D>("Castle/Sword");
             return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
                 new Vector2(gripPixel / texture.width, 0.5f), (tipPixel - gripPixel) / katana.Tip);

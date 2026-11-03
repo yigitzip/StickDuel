@@ -27,6 +27,16 @@ namespace StickDuel.Tests
             Assert.LessOrEqual(far.magnitude, 1f, "unreachable targets are clamped to the limb length");
         }
 
+        [Test]
+        public void LoadoutOnlyAcceptsPlayableWeapons()
+        {
+            var loadout = new PlayerLoadout();
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("not playable"));
+            Assert.IsFalse(loadout.TrySelect(WeaponType.SniperRifle));
+            Assert.AreEqual(WeaponType.Sword, loadout.Weapon);
+            Assert.IsTrue(loadout.TrySelect(WeaponType.Sword));
+        }
+
         [UnityTest]
         public IEnumerator AiVersusAiPlaysRounds()
         {

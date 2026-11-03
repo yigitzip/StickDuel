@@ -16,6 +16,7 @@ namespace StickDuel
 
         [Header("Sword Throw")]
         [SerializeField, Min(0f)] private float swordThrowSpeed = 14f;
+        [SerializeField, Min(0f)] private float spearThrowSpeed = 17f;
         [Tooltip("Walking this close (from the hip) to the fallen sword picks it up.")]
         [SerializeField, Min(0.1f)] private float swordPickupRange = 1.2f;
 
@@ -92,6 +93,7 @@ namespace StickDuel
                 thrust |= keyboard.leftShiftKey.isPressed;
                 if (keyboard.qKey.wasPressedThisFrame) fighter.Roll(-1);
                 if (keyboard.eKey.wasPressedThisFrame) fighter.Roll(1);
+                if (keyboard.fKey.wasPressedThisFrame && fighter.spear != null) fighter.spear.TrySpin();
             }
 
             Gamepad gamepad = Gamepad.current;
@@ -196,7 +198,11 @@ namespace StickDuel
                 return;
             }
 
-            if (sword != null && sword.IsHeld)
+            if (fighter.spear != null && fighter.spear.IsHeld)
+            {
+                fighter.spear.Throw(ThrowDirection() * spearThrowSpeed);
+            }
+            else if (sword != null && sword.IsHeld)
             {
                 sword.Throw(ThrowDirection() * swordThrowSpeed);
             }
@@ -208,6 +214,18 @@ namespace StickDuel
 
         private void PickUpSword()
         {
+            SpearWeapon spear = fighter.spear;
+            if (spear != null && !spear.IsHeld && !spear.IsFlying && fighter.ControlsEnabled && !fighter.IsDead)
+            {
+                Vector2 hip = fighter.Body.position;
+                if (Vector2.Distance(spear.ClosestPoint(hip), hip) <= swordPickupRange)
+                {
+                    spear.Regrip();
+                }
+
+                return;
+            }
+
             Sword sword = fighter.sword;
             if (sword == null || sword.IsHeld || sword.IsFlying || !fighter.ControlsEnabled || fighter.IsDead)
             {
