@@ -26,12 +26,15 @@ namespace StickDuel
         private float zoomPunch;
         private float minX = -15f;
         private float maxX = 15f;
+        private float maxY = float.MaxValue;
         private Fighter fixedFollowTarget;
         private float fixedFollowSize;
 
         public Fighter[] Targets { set => targets = value; }
         /// <summary>Lowest the camera centre goes (the castle raises it to the current floor).</summary>
         public float MinY { set => minY = value; }
+        /// <summary>Highest the camera centre goes (Sniper Mode pins it to the painting's middle). Unlimited by default.</summary>
+        public float MaxY { set => maxY = value; }
 
         /// <summary>Follows one target at the starting zoom (times <paramref name="zoom"/>) without framing or zooming other fighters.</summary>
         public void SetFixedFollow(Fighter target, float zoom = 1f)
@@ -98,7 +101,7 @@ namespace StickDuel
             float centre = fixedFollowTarget.Body.position.x;
             Vector3 target = new Vector3(
                 left < right ? Mathf.Clamp(centre, left, right) : (minX + maxX) * 0.5f,
-                Mathf.Max(minY, fixedFollowTarget.transform.position.y + heightOffset - fixedFollowSize * 0.4f),
+                Mathf.Min(maxY, Mathf.Max(minY, fixedFollowTarget.transform.position.y + heightOffset - fixedFollowSize * 0.4f)),
                 basePosition.z);
             basePosition = Vector3.SmoothDamp(basePosition, target, ref velocity, smoothTime, Mathf.Infinity, dt);
         }
@@ -124,7 +127,7 @@ namespace StickDuel
             float centre = (minX + maxX) * 0.5f;
             Vector3 target = new Vector3(
                 left < right ? Mathf.Clamp(centre, left, right) : (this.minX + this.maxX) * 0.5f,
-                Mathf.Max(minY, maxY + heightOffset - size * 0.4f),
+                Mathf.Min(this.maxY, Mathf.Max(minY, maxY + heightOffset - size * 0.4f)),
                 basePosition.z);
             basePosition = Vector3.SmoothDamp(basePosition, target, ref velocity, smoothTime, Mathf.Infinity, dt);
         }

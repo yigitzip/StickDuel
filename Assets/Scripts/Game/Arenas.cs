@@ -111,6 +111,7 @@ namespace StickDuel
         // Kept across Esc reloads so the menu remembers the last choice.
         private static readonly PlayerLoadout loadout = new PlayerLoadout();
         private static int selectedMap;
+        private static int selectedSniperMap;
 
         private DuelManager duel;
         private GameObject environment;
@@ -121,8 +122,12 @@ namespace StickDuel
         private Sprite shadowSprite;
         private readonly List<Outline> weaponOutlines = new List<Outline>();
         private readonly List<Outline> mapOutlines = new List<Outline>();
+        private readonly List<Outline> sniperMapOutlines = new List<Outline>();
+        private readonly List<GameObject> arenaCards = new List<GameObject>();
+        private readonly List<GameObject> sniperMapCards = new List<GameObject>();
+        private Text mapRowTitle;
         private readonly List<Outline> modeOutlines = new List<Outline>();
-        private enum Mode { Duel, StormTheCastle, Endless }
+        private enum Mode { Duel, StormTheCastle, Endless, Sniper }
 
         private Mode mode; // per scene load: Esc always comes back to Duel
 
@@ -172,6 +177,7 @@ namespace StickDuel
 
             SetControls(false);
             BuildMenu();
+            Cursor.visible = true; // the menu needs it; Fight hides it again
         }
 
         private void Update()
@@ -244,6 +250,13 @@ namespace StickDuel
 
             Destroy(menu);
             menu = null;
+            Cursor.visible = false; // aim is the weapon's job (the sniper laser, the aim line); Esc reloads into the menu
+            if (mode == Mode.Sniper)
+            {
+                StartSniper(); // its own map, loadout, bot and flow: none of the steps below apply
+                return;
+            }
+
             bool castleRun = mode == Mode.StormTheCastle;
             CastleLevel castle = castleRun ? BuildCastle() : null;
             if (!castleRun)
@@ -270,6 +283,26 @@ namespace StickDuel
             }
 
             duel.enabled = true; // its Start kicks off the match (or just the HUD, in a run mode)
+        }
+
+        /// <summary>Sniper Mode: the graybox map in place of a painted arena, then the mode takes over (weapons, bot, round).</summary>
+        private void StartSniper()
+        {
+            environment.SetActive(false);
+            HideSceneSky();
+            if (duel.GetComponent<SniperMode>() == null)
+            {
+                duel.gameObject.AddComponent<SniperMode>().Init(duel, selectedSniperMap);
+            }
+
+            duel.enabled = true; // its Start builds the HUD; SniperMode runs the round
+        }
+
+        /// <summary>Skips the menu straight into Sniper Mode (for an editor test bridge).</summary>
+        public void StartSniperMode()
+        {
+            SelectMode(Mode.Sniper);
+            Fight();
         }
 
         private static void SetControls(bool enabled)
@@ -636,7 +669,7 @@ namespace StickDuel
                 if (playable)
                 {
                     Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 34f), new Vector2(cardWidth - 20f, 100f));
-                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : type == WeaponType.Bow ? BowWeapon.Art : katana;
+                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : type == WeaponType.Bow ? BowWeapon.Art : type == WeaponType.SniperRifle ? SniperRifleWeapon.Art : katana;
                     picture.preserveAspect = true;
                     picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
                 }
@@ -646,7 +679,7 @@ namespace StickDuel
                 weaponOutlines.Add(card.GetComponent<Outline>());
             }
 
-            UiText(menu.transform, font, "CHOOSE YOUR ARENA", 34, new Vector2(0f, -10f), Color.white);
+            mapRowTitle = UiText(menu.transform, font, "CHOOSE YOUR ARENA", 34, new Vector2(0f, -10f), Color.white);
             for (int i = 0; i < All.Length; i++)
             {
                 int index = i;
@@ -658,6 +691,21 @@ namespace StickDuel
                 UiText(card.transform, font, arena.Name, 30, new Vector2(0f, -100f), Color.white);
                 UiText(card.transform, font, arena.Blurb, 19, new Vector2(0f, -128f), new Color(1f, 1f, 1f, 0.7f));
                 mapOutlines.Add(card.GetComponent<Outline>());
+                arenaCards.Add(card.gameObject);
+            }
+
+            // Sniper Mode plays its own maps: the same row shows them instead while that mode is picked.
+            for (int i = 0; i < SniperMap.Count; i++)
+            {
+                int index = i;
+                Image card = Card(SniperMap.Name(i), new Vector2((i - 1.5f) * 440f, -195f), new Vector2(410f, 290f), new Color(0.16f, 0.13f, 0.22f), () => SelectSniperMap(index));
+                Image picture = UiImage("Preview", card.transform, Color.white, new Vector2(0f, 30f), new Vector2(390f, 218f));
+                picture.sprite = SniperMap.Preview(i);
+                picture.preserveAspect = true;
+                UiText(card.transform, font, SniperMap.Name(i), 30, new Vector2(0f, -100f), Color.white);
+                UiText(card.transform, font, SniperMap.Blurb(i), 19, new Vector2(0f, -128f), new Color(1f, 1f, 1f, 0.7f));
+                sniperMapOutlines.Add(card.GetComponent<Outline>());
+                sniperMapCards.Add(card.gameObject);
             }
 
             Image fight = Card("Fight", new Vector2(560f, -410f), new Vector2(300f, 86f), new Color(0.85f, 0.25f, 0.2f), Fight);
@@ -671,18 +719,21 @@ namespace StickDuel
                 (Mode.Duel, "DUEL", "Best of five"),
                 (Mode.StormTheCastle, "STORM THE CASTLE", "Climb the castle, take the crown"),
                 (Mode.Endless, "ENDLESS SURVIVAL", "Hold out against the horde"),
+                (Mode.Sniper, "SNIPER MODE", "Rifles only, walls stop bullets"),
             };
             for (int i = 0; i < modes.Length; i++)
             {
                 Mode pick = modes[i].mode;
-                Image card = Card(modes[i].title, new Vector2(-620f + i * 310f, -410f), new Vector2(290f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(pick));
-                UiText(card.transform, font, modes[i].title, modes[i].title.Length > 8 ? 26 : 34, new Vector2(0f, 12f), Color.white);
-                UiText(card.transform, font, modes[i].blurb, 17, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f), 270f);
+                // Four cards fit left of FIGHT (which starts at x = 410).
+                Image card = Card(modes[i].title, new Vector2(-720f + i * 255f, -410f), new Vector2(240f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(pick));
+                UiText(card.transform, font, modes[i].title, modes[i].title.Length > 12 ? 20 : modes[i].title.Length > 8 ? 24 : 34, new Vector2(0f, 12f), Color.white);
+                UiText(card.transform, font, modes[i].blurb, 15, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f), 225f);
                 modeOutlines.Add(card.GetComponent<Outline>());
             }
 
             SelectWeapon(loadout.Weapon);
             SelectMap(selectedMap);
+            SelectSniperMap(selectedSniperMap);
             SelectMode(mode);
         }
 
@@ -690,6 +741,10 @@ namespace StickDuel
         {
             mode = pick;
             Highlight(modeOutlines, (int)pick);
+            bool sniper = pick == Mode.Sniper;
+            foreach (GameObject card in arenaCards) card.SetActive(!sniper);
+            foreach (GameObject card in sniperMapCards) card.SetActive(sniper);
+            if (mapRowTitle != null) mapRowTitle.text = sniper ? "CHOOSE THE FIRST MAP" : "CHOOSE YOUR ARENA";
         }
 
         private void SelectWeapon(WeaponType type)
@@ -702,6 +757,13 @@ namespace StickDuel
         {
             selectedMap = index;
             Highlight(mapOutlines, index);
+        }
+
+        /// <summary>Sniper Mode starts on this map and goes on through the rest in order.</summary>
+        private void SelectSniperMap(int index)
+        {
+            selectedSniperMap = Mathf.Clamp(index, 0, SniperMap.Count - 1);
+            Highlight(sniperMapOutlines, selectedSniperMap);
         }
 
         private static void Highlight(List<Outline> outlines, int index)
@@ -742,7 +804,7 @@ namespace StickDuel
         }
 
         /// <summary>Centred label; with a <paramref name="width"/> it wraps inside it instead of overflowing.</summary>
-        private static void UiText(Transform parent, Font font, string value, int size, Vector2 position, Color color, float width = 0f)
+        private static Text UiText(Transform parent, Font font, string value, int size, Vector2 position, Color color, float width = 0f)
         {
             var go = new GameObject(value, typeof(RectTransform));
             go.transform.SetParent(parent, false);
@@ -760,6 +822,8 @@ namespace StickDuel
             {
                 text.rectTransform.sizeDelta = new Vector2(width, text.rectTransform.sizeDelta.y);
             }
+
+            return text;
         }
     }
 }

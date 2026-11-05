@@ -43,6 +43,9 @@ namespace StickDuel
         private int shurikenCount;
         private float reloadTimer;
 
+        /// <summary>Sniper Mode: the rifle is the only weapon. No shuriken, no punch (right click still throws the rifle).</summary>
+        public bool SniperOnly { get; set; }
+
         public int ShurikenCount => shurikenCount;
         public int MaxShuriken => maxShuriken;
         /// <summary>0→1 while the empty set is refilling, 0 otherwise.</summary>
@@ -177,6 +180,24 @@ namespace StickDuel
                 return;
             }
 
+            // With the sniper rifle in hand the left button fires it (the rifle's cooldown limits spam).
+            if (fighter.heldWeapon is SniperRifleWeapon rifle && rifle.IsHeld)
+            {
+                if (mouse.leftButton.wasPressedThisFrame)
+                {
+                    rifle.TryFire();
+                }
+
+                charging = false;
+                return;
+            }
+
+            if (SniperOnly)
+            {
+                charging = false; // the rifle is out of the hands: nothing else to throw
+                return;
+            }
+
             if (mouse.leftButton.wasPressedThisFrame && shurikenCount > 0)
             {
                 charging = true;
@@ -213,7 +234,7 @@ namespace StickDuel
             {
                 sword.Throw(ThrowDirection() * swordThrowSpeed);
             }
-            else
+            else if (!SniperOnly)
             {
                 fighter.Punch();
             }

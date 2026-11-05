@@ -31,10 +31,11 @@ namespace StickDuel.Tests
         public void LoadoutOnlyAcceptsPlayableWeapons()
         {
             var loadout = new PlayerLoadout();
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("not playable"));
-            Assert.IsFalse(loadout.TrySelect(WeaponType.SniperRifle));
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("unknown weapon type"));
+            Assert.IsFalse(loadout.TrySelect((WeaponType)999));
             Assert.AreEqual(WeaponType.Sword, loadout.Weapon);
-            Assert.IsTrue(loadout.TrySelect(WeaponType.Sword));
+            Assert.IsTrue(loadout.TrySelect(WeaponType.SniperRifle));
+            Assert.AreEqual(WeaponType.SniperRifle, loadout.Weapon);
         }
 
         [UnityTest]

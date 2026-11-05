@@ -318,6 +318,22 @@ namespace StickDuel
             enemyName.text = label;
         }
 
+        /// <summary>For modes without shuriken (Sniper Mode): the HUD's shuriken slots go.</summary>
+        public void HideShurikenIcons()
+        {
+            if (shurikenIcons == null)
+            {
+                return;
+            }
+
+            foreach (Image icon in shurikenIcons)
+            {
+                icon.transform.parent.gameObject.SetActive(false); // the slot: dim back and fill
+            }
+
+            shurikenIcons = null;
+        }
+
         /// <summary>Run-mode bots fight without a health or stamina bar.</summary>
         public void HideEnemyBars()
         {
