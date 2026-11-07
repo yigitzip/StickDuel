@@ -55,6 +55,8 @@ namespace StickDuel
         [SerializeField, Min(0.05f)] private float spinDuration = 0.7f;
         [SerializeField, Min(0f)] private float spinCooldown = 1.2f;
         [SerializeField, Min(0f)] private float spinStaminaCost = 35f;
+        [Tooltip("Shift jab: fraction of max stamina it costs (no stamina, no jab).")]
+        [SerializeField, Range(0f, 1f)] private float jabStaminaFraction = 0.3f;
         [SerializeField, Min(0f)] private float spinDamage = 26f;
         [Tooltip("Spin hits and the jab that ends the spin always crit for this much.")]
         [SerializeField, Min(1f)] private float critMultiplier = 1.5f;
@@ -63,7 +65,7 @@ namespace StickDuel
 
         [Header("Throw")]
         [SerializeField, Min(0f)] private float throwSpeed = 17f;
-        [SerializeField, Min(0f)] private float throwGravity = 0.5f;
+        [SerializeField, Min(0f)] private float throwGravity = 1.6f;
         [SerializeField, Min(0f)] private float throwDamage = 30f;
 
         private static Sprite art;
@@ -235,7 +237,8 @@ namespace StickDuel
         {
             if (jabTimer < 0f)
             {
-                if (owner.thrustHeld && owner.ControlsEnabled && !owner.IsStaggered && !owner.IsRolling && spinTimer <= 0f && Time.time >= jabReadyTime)
+                if (owner.thrustHeld && owner.ControlsEnabled && !owner.IsStaggered && !owner.IsRolling && spinTimer <= 0f && Time.time >= jabReadyTime
+                    && owner.TrySpendStamina(owner.MaxStamina * jabStaminaFraction))
                 {
                     StartJab(false);
                 }

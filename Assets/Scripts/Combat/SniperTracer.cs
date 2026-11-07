@@ -1,10 +1,12 @@
+using System;
 using UnityEngine;
 
 namespace StickDuel
 {
     /// <summary>
-    /// Visual only: the sniper bullet streaking from the muzzle to where <see cref="SniperRifleWeapon.CalculateShot"/>
-    /// ended, then gone. No collider, no damage (the hitscan already resolved the shot). Runs on
+    /// The sniper bullet streaking from the muzzle to where <see cref="SniperRifleWeapon.CalculateShot"/>
+    /// ended, then gone. No collider: the hitscan already picked the end point, this just carries the
+    /// hit there and fires <c>onArrive</c> on arrival (at once if it can't be drawn). Runs on
     /// unscaled time so the hit-stop freeze doesn't hang it mid-air.
     /// Art: Resources/Weapons/SniperBullet.png (512x64 at 220 px/unit, head at x=476px, tail to the left).
     /// </summary>
@@ -16,6 +18,7 @@ namespace StickDuel
         private static Sprite art;
         private Vector2 end;
         private float speed;
+        private Action onArrive;
 
         /// <summary>The bullet art, pivot on its glowing head. Null, with an error, if the texture is missing.</summary>
         public static Sprite Art
@@ -40,12 +43,13 @@ namespace StickDuel
         }
 
         /// <summary>Fires one streak from <paramref name="from"/> to <paramref name="to"/>, drawn like <paramref name="like"/> (material, sorting layer) just under it.</summary>
-        public static void Launch(Vector2 from, Vector2 to, float speed, SpriteRenderer like)
+        public static void Launch(Vector2 from, Vector2 to, float speed, SpriteRenderer like, Action onArrive = null)
         {
             Sprite sprite = Art;
             Vector2 path = to - from;
             if (sprite == null || path.sqrMagnitude < 0.0001f)
             {
+                onArrive?.Invoke();
                 return;
             }
 
@@ -59,6 +63,7 @@ namespace StickDuel
             var tracer = go.AddComponent<SniperTracer>();
             tracer.end = to;
             tracer.speed = speed;
+            tracer.onArrive = onArrive;
         }
 
         private void Update()
@@ -68,6 +73,7 @@ namespace StickDuel
             if (position == end)
             {
                 Destroy(gameObject);
+                onArrive?.Invoke();
             }
         }
     }

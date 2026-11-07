@@ -64,9 +64,10 @@ namespace StickDuel
         /// <summary>The katana preset the Sword is tuned for.</summary>
         public static Weapon Katana => All[0];
 
-        /// <summary>The weapon's sprite (null for the katana, which keeps the sword's own).</summary>
+        /// <summary>The weapon's sprite (null for the katana, which keeps the sword's own). Settable for art that is not in Resources/Weapons at katana scale.</summary>
         public Sprite Sprite
         {
+            set => sprite = value;
             get
             {
                 if (sprite == null && Texture != null)

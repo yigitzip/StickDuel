@@ -10,6 +10,7 @@ namespace StickDuel
         Mace,
         SniperRifle,
         LaserSword,
+        CastleSword,
     }
 
     /// <summary>Menu data per <see cref="WeaponType"/>. Only playable types can be selected.</summary>
@@ -27,6 +28,7 @@ namespace StickDuel
             {
                 case WeaponType.SniperRifle: return "SNIPER RIFLE";
                 case WeaponType.LaserSword: return "LASER SWORD";
+                case WeaponType.CastleSword: return "CASTLE SWORD";
                 default: return type.ToString().ToUpperInvariant();
             }
         }
@@ -40,6 +42,7 @@ namespace StickDuel
                 case WeaponType.Axe: return "Heavy chops, SHIFT slam, F leap";
                 case WeaponType.Mace: return "Crushing blows, SHIFT slam, F leap";
                 case WeaponType.LaserSword: return "Katana moves, burns deeper";
+                case WeaponType.CastleSword: return "Katana moves, a knight's blade";
                 case WeaponType.Bow: return "Hold LEFT CLICK to draw, release to shoot";
                 case WeaponType.SniperRifle: return "LEFT CLICK fires along the laser";
                 default: return "Coming soon";

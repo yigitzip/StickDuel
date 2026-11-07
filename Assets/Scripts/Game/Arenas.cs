@@ -266,7 +266,7 @@ namespace StickDuel
 
             Fighter player = duel.Player;
             Fighter enemy = duel.Enemy;
-            if (player.sword != null) WeaponFactory.Prepare(castleRun ? WeaponType.Sword : loadout.Weapon, player)?.Equip(player);
+            if (player.sword != null) WeaponFactory.Prepare(loadout.Weapon, player)?.Equip(player); // the menu's weapon in every mode, the castle too
             if (enemy.sword != null) WeaponFactory.Prepare(WeaponType.Sword, enemy)?.Equip(enemy);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
@@ -669,7 +669,7 @@ namespace StickDuel
                 if (playable)
                 {
                     Image picture = UiImage("Art", card.transform, Color.white, new Vector2(0f, 34f), new Vector2(cardWidth - 20f, 100f));
-                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : type == WeaponType.Bow ? BowWeapon.Art : type == WeaponType.SniperRifle ? SniperRifleWeapon.Art : katana;
+                    picture.sprite = type == WeaponType.Spear ? SpearWeapon.Art : type == WeaponType.Axe ? AxeWeapon.Art : type == WeaponType.Mace ? MaceWeapon.Art : type == WeaponType.LaserSword ? LaserSwordWeapon.LaserBlade.Sprite : type == WeaponType.Bow ? BowWeapon.Art : type == WeaponType.SniperRifle ? SniperRifleWeapon.Art : type == WeaponType.CastleSword ? CastleSwordWeapon.Art : katana;
                     picture.preserveAspect = true;
                     picture.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 20f);
                 }

@@ -56,7 +56,8 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float chopDamage = 38f;
         [SerializeField, Min(0f)] private float chopKnockback = 1.7f;
         [SerializeField, Min(0f)] private float chopStagger = 0.4f;
-        [SerializeField, Min(0f)] private float chopStaminaCost = 10f;
+        [Tooltip("Fraction of max stamina a chop costs (axe and mace alike).")]
+        [SerializeField, Range(0f, 1f)] private float chopStaminaFraction = 0.3f;
         [Tooltip("Step into the chop (lunge speed and length multipliers; grounded only).")]
         [SerializeField] private Vector2 chopStep = new Vector2(0.8f, 0.5f);
 
@@ -280,7 +281,7 @@ namespace StickDuel
             {
                 if (owner.thrustHeld && owner.ControlsEnabled && !owner.IsStaggered && !owner.IsRolling && Time.time >= chopReadyTime)
                 {
-                    if (!owner.TrySpendStamina(chopStaminaCost))
+                    if (!owner.TrySpendStamina(owner.MaxStamina * chopStaminaFraction))
                     {
                         Tired();
                         chopReadyTime = Time.time + 0.5f;

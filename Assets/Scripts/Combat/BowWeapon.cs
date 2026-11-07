@@ -12,11 +12,12 @@ namespace StickDuel
     /// point first, headshots, batted away by blades, stick in the ground. No melee: the bow
     /// itself never hurts, but it does block a blade. Thrown, it tumbles, lightly.
     /// Bow space: origin = grip, +x = where the arrow goes, string at x = <see cref="StringRest"/>.
-    /// Art: Resources/Weapons/Bow.png (400 px/unit, 1.5 units tall, grip at x=83px) and Arrow.png (0.7 units, nock at the left).
+    /// Art: Resources/Weapons/Bow.png (400 px/unit, 1.5 units tall, grip at x=83px) and Arrow.png (880 px at 800 px/unit = 1.1 units, nock at the left).
     /// </summary>
     public sealed class BowWeapon : HeldWeapon
     {
         private const float PixelsPerUnit = 400f;
+        private const float ArrowPixelsPerUnit = 800f; // Arrow.png is 880 px: 1.1 units, big enough to read in flight
         private const float GripPixel = 83.5f;
         private const float StringRest = -0.2f;
 
@@ -82,7 +83,7 @@ namespace StickDuel
         public static Sprite Art => art != null ? art : art = LoadArt("Bow", PixelsPerUnit, GripPixel);
 
         /// <summary>The arrow art, nock at the left edge. Null, with an error, if the texture is missing.</summary>
-        public static Sprite ArrowArt => arrowArt != null ? arrowArt : arrowArt = LoadArt("Arrow", PixelsPerUnit, 0f);
+        public static Sprite ArrowArt => arrowArt != null ? arrowArt : arrowArt = LoadArt("Arrow", ArrowPixelsPerUnit, 0f);
 
         /// <summary>Builds the bow for <paramref name="owner"/> (unequipped). Null, with an error, if the art is missing.</summary>
         public static BowWeapon Create(Fighter owner)

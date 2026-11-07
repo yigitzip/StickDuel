@@ -78,6 +78,7 @@ namespace StickDuel
         /// <summary>Weapon with its own physics (spear, axe); set by <see cref="HeldWeapon.Equip"/>, which also hides the sword and clears <see cref="sword"/>.</summary>
         [NonSerialized] public HeldWeapon heldWeapon;
         public StickFigureRig rig;
+        /// <summary>Head hit zone (headshots). A trigger: it never bumps into ceilings or one-way ledges, the capsule alone is the body.</summary>
         public Collider2D headCollider;
 
         // Input, written by drivers.

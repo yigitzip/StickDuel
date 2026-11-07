@@ -9,7 +9,10 @@ namespace StickDuel
     /// of that frame (x right, y down), and the painting spans <see cref="WidthUnits"/> world units,
     /// so a fighter (about 2 units) stands as tall as a painted door. Ground row = world y 0.
     /// Solid and ledge colliders are non-trigger on the Default layer (they stop the sniper laser,
-    /// the bullet and the bot's sight); death zones are triggers on Ignore Raycast. Moving parts:
+    /// the bullet and the bot's sight); death zones are triggers on Ignore Raycast. Buildings painted
+    /// behind the walkway (station house, cabin, site offices) get a roof ledge and no walls: nothing
+    /// invisible stops a fighter, and nothing hangs within a standing fighter's height (1.75 units =
+    /// 100 px) over a floor. Moving parts:
     /// a shuttle train, a drawbridge, two lifts, a lighthouse beam over a dark layer.
     /// </summary>
     public static class SniperMap
@@ -70,16 +73,16 @@ namespace StickDuel
                 Boxes = new[]
                 {
                     S(0, 2000, 720, 848),                                        // platform (snow top)
-                    S(385, 397, 545, 720), L(0, 410, 450, 468),                  // station house wall, roof
+                    L(0, 410, 450, 468),                                         // station house roof (the house stands behind the platform)
                     S(418, 562, 678, 720), S(442, 542, 636, 678), S(467, 518, 594, 636), // crate pyramid
-                    L(600, 683, 590, 600), L(600, 683, 488, 498),                // left tower rungs (clear of a standing head)
+                    L(600, 683, 590, 600), L(600, 683, 480, 490),                // left tower rungs (110 px apart: a fighter stands between them)
                     L(593, 1405, 400, 414),                                      // footbridge deck
-                    L(1317, 1400, 488, 498), L(1317, 1400, 590, 600),            // right tower rungs
+                    L(1317, 1400, 480, 490), L(1317, 1400, 590, 600),            // right tower rungs
                     S(735, 858, 655, 720),                                       // luggage cart
                     L(1430, 1555, 652, 664),                                     // bench back
                     S(1556, 1620, 686, 720), S(1562, 1608, 651, 686),            // crates by the bench
                     S(1662, 1760, 678, 720), S(1694, 1745, 636, 678),            // crates by the cabin
-                    S(1762, 1775, 550, 720), L(1750, 1992, 526, 544), S(1802, 1947, 352, 480), // cabin wall, roof, water tank
+                    L(1750, 1992, 526, 544), S(1802, 1947, 352, 422),            // cabin roof (the cabin stands behind the platform), water tank (its legs are walked under)
                 },
                 SpawnA = P(250, 720), SpawnB = P(1880, 720),
                 Spots = new[] { P(200, 450), P(492, 594), P(800, 400), P(1000, 400), P(1200, 400), P(680, 720), P(1490, 652), P(1720, 636), P(1778, 526) },
@@ -92,22 +95,21 @@ namespace StickDuel
                 {
                     S(0, 842, 722, 848), S(1157, 2000, 722, 848), H(842, 1157, 780, 848), // quays, canal
                     L(0, 398, 370, 388),                                         // warehouse roof
-                    S(385, 572, 507, 615), S(385, 677, 615, 722),                // containers
-                    S(1347, 1407, 662, 722),                                     // right bollard (the left one stands in front of the containers)
+                    S(385, 677, 615, 722),                                       // lower container (the upper one is scenery: walk and shoot over it)
                     S(1529, 1720, 643, 722), S(1583, 1686, 565, 643),            // crates
                     S(1760, 1950, 406, 462), S(1735, 1975, 245, 370),            // crane base and cab (a roof over spawn B)
                 },
                 SpawnA = P(200, 722), SpawnB = P(1850, 722),
-                Spots = new[] { P(250, 370), P(480, 507), P(640, 615), P(760, 722), P(1000, 722), P(1440, 722), P(1634, 565) },
+                Spots = new[] { P(250, 370), P(480, 615), P(640, 615), P(760, 722), P(1000, 722), P(1440, 722), P(1634, 565) },
                 Movers = new[] { new Mover(MoverKind.Bridge, 842, 1157, 722, 752, Vector2.zero, 8f, 1.2f, 4f) },
             },
             new Def
             {
-                Name = "LIGHTHOUSE ISLE", Blurb = "Dark. Only the beam shows you", Texture = "Lighthouse", Ground = 734,
+                Name = "LIGHTHOUSE ISLE", Blurb = "Rocks and ledges in the storm", Texture = "Lighthouse", Ground = 734,
                 Boxes = new[]
                 {
                     S(0, 2000, 734, 848),                                        // rock shelf
-                    L(120, 310, 585, 600), S(12, 60, 640, 734), S(305, 332, 600, 734), // upturned boat: keel (jump out through it), stern, bow
+                    L(120, 310, 585, 600),                                       // upturned boat: the keel is a ledge, the open hull shelters spawn A
                     S(352, 525, 622, 734), L(534, 757, 510, 525),                // left rock, left ledge
                     S(660, 1320, 690, 734), S(795, 1240, 595, 690),              // plateau: one step, then the top
                     L(1242, 1465, 510, 525), S(1467, 1652, 622, 734),            // right ledge, right rock
@@ -125,8 +127,7 @@ namespace StickDuel
                     S(0, 610, 745, 800), S(720, 1279, 745, 800), S(1382, 2000, 745, 800), // lowest girders
                     L(160, 600, 506, 540), L(797, 1202, 506, 540), L(1392, 1840, 506, 540), // middle girders
                     L(0, 137, 297, 325), L(172, 600, 295, 325), L(877, 1122, 295, 325), L(1392, 1827, 295, 325), L(1860, 2000, 295, 325), // top girders
-                    S(188, 200, 590, 745), L(0, 200, 590, 602),                  // site office A: front wall, roof
-                    S(1800, 1812, 590, 745), L(1800, 2000, 590, 602),            // site office B
+                    L(0, 200, 590, 602), L(1800, 2000, 590, 602),                // site office roofs (the offices stand behind the walkway)
                     S(320, 410, 700, 745), S(420, 580, 700, 745), S(1420, 1580, 700, 745), S(1590, 1680, 700, 745), // cement bags, beam stacks
                     H(0, 2000, 830, 900),                                        // the drop
                 },
@@ -277,7 +278,7 @@ namespace StickDuel
                     roof.transform.SetParent(train.transform, false);
                     var roofBox = roof.AddComponent<BoxCollider2D>();
                     roofBox.size = new Vector2(width * 0.5f, 0.2f);
-                    roofBox.offset = new Vector2(width * 0.23f, height * 0.5f - height * 0.08f - 0.1f);
+                    roofBox.offset = new Vector2(width * 0.23f, height * 0.5f); // flush with the top edge: clear of a fighter standing on the platform below
                     MakeOneWay(roof, roofBox);
                     Art(train.transform, "Train", new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), width, height, 1);
                     train.AddComponent<SniperMapMover>().Init(travel, 0f, m.Hold0, m.Move, m.Hold1, m.Offset);

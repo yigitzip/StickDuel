@@ -5,7 +5,7 @@ namespace StickDuel
 {
     /// <summary>
     /// Prepares the <see cref="IWeaponBehaviour"/> for a <see cref="WeaponType"/> on a fighter
-    /// (get-or-add, so calling it again is safe): the sword adapter (katana or laser sword preset) on the fighter's Sword, a new
+    /// (get-or-add, so calling it again is safe): the sword adapter (katana, laser sword or castle sword preset) on the fighter's Sword, a new
     /// weapon object for the spear, axe, mace, bow and sniper rifle. It does not equip; the caller does.
     /// </summary>
     public static class WeaponFactory
@@ -18,6 +18,7 @@ namespace StickDuel
             {
                 case WeaponType.Sword:
                 case WeaponType.LaserSword:
+                case WeaponType.CastleSword:
                     if (owner.sword == null)
                     {
                         Debug.LogError($"WeaponFactory: {owner.name} has no Sword rig for {type}.", owner);
@@ -25,7 +26,7 @@ namespace StickDuel
                     }
 
                     GameObject rig = owner.sword.gameObject;
-                    return type == WeaponType.Sword ? GetOrAdd<SwordWeaponAdapter>(rig) : GetOrAdd<LaserSwordWeapon>(rig);
+                    return type == WeaponType.Sword ? GetOrAdd<SwordWeaponAdapter>(rig) : type == WeaponType.LaserSword ? GetOrAdd<LaserSwordWeapon>(rig) : GetOrAdd<CastleSwordWeapon>(rig);
                 case WeaponType.Spear: return owner.heldWeapon is SpearWeapon spear ? spear : SpearWeapon.Create(owner);
                 case WeaponType.Axe: return owner.heldWeapon is AxeWeapon axe ? axe : AxeWeapon.Create(owner);
                 case WeaponType.Bow: return owner.heldWeapon is BowWeapon bow ? bow : BowWeapon.Create(owner);

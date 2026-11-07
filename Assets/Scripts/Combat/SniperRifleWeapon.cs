@@ -92,7 +92,7 @@ namespace StickDuel
         [SerializeField] private Color laserColor = new Color(1f, 0.08f, 0.05f, 0.85f);
         [Tooltip("After a shot the laser flares this long (tracer).")]
         [SerializeField, Min(0f)] private float flashTime = 0.08f;
-        [Tooltip("How fast the visible bullet streak flies (units/s). Visual only: the hit lands at once.")]
+        [Tooltip("How fast the bullet flies (units/s). The hit lands when it arrives.")]
         [SerializeField, Min(1f)] private float bulletSpeed = 35f;
 
         [Header("Throw")]
@@ -258,12 +258,18 @@ namespace StickDuel
                 Fx.Instance.Shake(0.35f);
             }
 
-            SniperTracer.Launch(shot.Origin, shot.End, bulletSpeed, GetComponent<SpriteRenderer>());
+            // The hit lands when the visible bullet gets there, not on the click.
+            SniperTracer.Launch(shot.Origin, shot.End, bulletSpeed, GetComponent<SpriteRenderer>(), () => Impact(shot));
+            return true;
+        }
 
+        /// <summary>The bullet arrived at <paramref name="shot"/>.End: deal the damage if the target is still there to take it.</summary>
+        private void Impact(SniperShot shot)
+        {
             Fighter victim = shot.Target;
-            if (victim == null || victim.IsRolling || (victim.isGuard && owner.isGuard))
+            if (victim == null || owner == null || victim.IsDead || victim.IsRolling || (victim.isGuard && owner.isGuard))
             {
-                return true; // fired: missed, hit a wall, or the target dodged
+                return; // missed, hit a wall, or the target dodged or died while the bullet flew
             }
 
             bool headshot = shot.Collider == victim.headCollider;
@@ -277,8 +283,6 @@ namespace StickDuel
                     Fx.Instance.Callout(shot.End + Vector2.up, "HEADSHOT!", critColor, 1.2f);
                 }
             }
-
-            return true;
         }
 
         private void LateUpdate()

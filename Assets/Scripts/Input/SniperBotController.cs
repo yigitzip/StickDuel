@@ -8,7 +8,7 @@ namespace StickDuel
     /// raycast, walls, cooldown, damage, sway and recoil, which hit the bot like the player).
     /// <list type="bullet">
     /// <item>Sight: <see cref="SniperRifleWeapon.CalculateShot(Vector2)"/> from the muzzle to the opponent's head and chest, the very query the laser and the shot use, so a wall in between means "not seen".</item>
-    /// <item>Seen: stand, swing the aim at a point a little off the target (<see cref="aimError"/>, re-rolled each decision) and, once seen for <see cref="reactionDelay"/>, fire when the laser is on them (sometimes early: <see cref="snapShotChance"/>).</item>
+    /// <item>Seen: stand, swing the aim at a point a little off the target (<see cref="aimError"/>, re-rolled each decision) and, once seen for <see cref="reactionDelay"/>, fire when the laser is on them (sometimes early: <see cref="snapShotChance"/>). Only while it is on screen itself: no shots from outside the camera's view.</item>
     /// <item>Not seen: never fire; walk to another standing spot (<see cref="Spots"/>) every <see cref="repositionInterval"/>, jumping onto what is in the way. No pathfinding.</item>
     /// </list>
     /// Writes the same Fighter input fields as the drivers, never devices.
@@ -94,7 +94,7 @@ namespace StickDuel
             {
                 nextDecision = Time.time + fireDecisionInterval;
                 aimOffset = Random.insideUnitCircle * aimError;
-                if (visible && seenFor >= reactionDelay)
+                if (visible && seenFor >= reactionDelay && OnScreen())
                 {
                     DecideFire(rifle, target);
                 }
@@ -104,6 +104,19 @@ namespace StickDuel
             Vector2 look = visible ? aimAt + aimOffset : target.ShoulderPosition;
             self.aimPoint = Vector2.SmoothDamp(self.aimPoint, look, ref aimVelocity, aimSmoothTime, Mathf.Infinity, dt);
             self.moveInput = visible ? BackOff(target) : Reposition(dt);
+        }
+
+        /// <summary>No shots from off screen: the player must be able to see the bot that shoots them.</summary>
+        private bool OnScreen()
+        {
+            Camera view = Camera.main;
+            if (view == null)
+            {
+                return true;
+            }
+
+            Vector3 p = view.WorldToViewportPoint(self.Body.position);
+            return p.z > 0f && p.x >= 0f && p.x <= 1f && p.y >= 0f && p.y <= 1f;
         }
 
         /// <summary>Head or chest reachable by a shot from the muzzle right now (walls and the bot's own body don't count as the target).</summary>

@@ -62,11 +62,9 @@ namespace StickDuel
             template.gameObject.SetActive(false);
             template.sword.gameObject.SetActive(false);
 
-            // Castle look: a medieval arming sword in place of the katana, art only. The katana's
-            // reach, hitbox and damage (Equip, just before) stay; guards clone the template's blade.
-            Sprite castleSword = CastleSwordSprite();
-            duel.Player.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
-            template.sword.GetComponent<SpriteRenderer>().sprite = castleSword;
+            // Guards carry the arming sword (art only, the katana's stats); guards clone the template's blade.
+            // The player keeps whatever the menu picked, the castle sword included.
+            template.sword.GetComponent<SpriteRenderer>().sprite = CastleSwordWeapon.Art;
             duel.Player.rig.WearArmor(); // guards put theirs on as they spawn
             Shuriken.Kunai = KunaiSprite();
 
@@ -74,19 +72,6 @@ namespace StickDuel
             cameraRig.SetBounds(0f, CastleLevel.Width, 5f);
             cameraRig.SetFixedFollow(duel.Player, CloseUp);
             if (Fx.Instance != null) Fx.Instance.Calm = true; // Fx lives in the scene: a reload resets it
-        }
-
-        /// <summary>
-        /// Resources/Castle/Sword: pointing right, grip centre at x=80px on the blade axis (mid
-        /// height), tip at x=503px. Scaled so the tip lands where the katana's does (Weapon.Katana).
-        /// </summary>
-        private static Sprite CastleSwordSprite()
-        {
-            const float gripPixel = 80f, tipPixel = 503f;
-            Weapon katana = Weapon.Katana;
-            var texture = Resources.Load<Texture2D>("Castle/Sword");
-            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
-                new Vector2(gripPixel / texture.width, 0.5f), (tipPixel - gripPixel) / katana.Tip);
         }
 
         /// <summary>Resources/Castle/Kunai, pointing right, centred, about this long in the world.</summary>
