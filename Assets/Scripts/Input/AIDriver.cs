@@ -35,6 +35,7 @@ namespace StickDuel
         private void Awake()
         {
             self = GetComponent<Fighter>();
+            self.usesVines = false; // it would hang on forever
             modeTimer = 1f;
             SetBounds(-arenaHalfWidth, arenaHalfWidth);
         }
@@ -112,18 +113,20 @@ namespace StickDuel
                 self.moveInput = flankDirection;
             }
 
-            if (self.IsGrounded && Random.value < dt * (opponent.IsGrounded ? 0.12f : 0.6f) * skill)
+            // A hop now and then, never at an edge: drifting sideways in the air would carry it off.
+            if (self.IsGrounded && Random.value < dt * (opponent.IsGrounded ? 0.12f : 0.6f) * skill && GroundAhead(me, 1) && GroundAhead(me, -1))
             {
                 self.RequestJump();
             }
 
-            // Never walk off a ledge or into lava; jump the gap when the opponent is across it.
+            // Never walk off a ledge or into lava; jump the gap when the opponent is across it
+            // (not up on a platform a jump cannot reach: the forest's side logs).
             if (self.IsGrounded && Mathf.Abs(self.moveInput) > 0.1f)
             {
                 int direction = self.moveInput > 0f ? 1 : -1;
                 if (!GroundAhead(me, direction))
                 {
-                    if (direction == toward && distance > 1.2f)
+                    if (direction == toward && distance > 1.2f && them.y - me.y < 2f)
                     {
                         self.RequestJump();
                     }

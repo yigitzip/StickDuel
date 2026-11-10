@@ -1,14 +1,16 @@
 """Turns the painted arena references in Tools/reference into in-game backgrounds.
 
 Run from repo root:  python3 Tools/prepare_backgrounds.py
-Each 1600x893 painting gets padding so the camera never sees past it: the sky is
+Each 1600x893 painting (the 2752x1536 forest, space and neon ones are scaled down) gets padding so the camera never sees past it: the sky is
 stretched upwards, the ground mirrored downwards and the sides mirrored outwards.
 Arenas.cs places them at 92 px/unit with the playable ground row at world y=0, and
 knows the padding below (keep PAD_* in sync with it).
 """
 import os
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
+from scipy import ndimage
 
 HERE = os.path.dirname(__file__)
 REF = os.path.join(HERE, "reference")
@@ -94,9 +96,47 @@ def icicle():
     return img.resize((64, 256), Image.LANCZOS)
 
 
+# Forest: the painted ivy swings in game (Arenas.cs SwingingIvy), so it comes off the background
+# and goes in on its own. forest_guide.png is the collision reference the Forest numbers in Arenas.cs
+# were measured from (red = floors, green = climbable vines, blue = the ivy's anchor).
+def ivy_alpha():
+    return np.asarray(Image.open(os.path.join(REF, "forest_ivy.png")).convert("RGBA"))[..., 3] > 0
+
+
+def lift_ivy(img):
+    """Paints the ivy out of the forest: each of its pixels takes the scenery just beside it (the
+    trees to its left cloned in, to its right where that is ivy too), blurred scenery where both are."""
+    rgb = np.asarray(img, dtype=np.float32)
+    hole = ndimage.binary_dilation(ivy_alpha(), iterations=8)
+    valid = (~hole).astype(np.float32)
+    weight = ndimage.gaussian_filter(valid, 30)
+    out = ndimage.gaussian_filter(rgb * valid[..., None], (30, 30, 0)) / np.maximum(weight, 1e-3)[..., None]
+    shift = 64  # wider than the ivy's stem, so both samples land on real trees
+    for side in (-shift, shift):
+        clone, ok = np.roll(rgb, side, axis=1), np.roll(valid, side, axis=1) > 0
+        out[ok] = clone[ok]
+    out[~hole] = rgb[~hole]
+    # soften the seam
+    seam = ndimage.binary_dilation(hole, iterations=3) & ~ndimage.binary_erosion(hole, iterations=3)
+    out[seam] = ndimage.gaussian_filter(out, (2, 2, 0))[seam]
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8))
+
+
+def ivy():
+    """The ivy alone, cropped so its root is the top-right corner and its tip the bottom-left one
+    (Arenas.cs hangs it by that corner and reads the swing length and rest angle off the size)."""
+    img = Image.open(os.path.join(REF, "forest_ivy.png")).convert("RGBA")
+    alpha = np.asarray(img)[..., 3] > 0
+    ys, xs = np.nonzero(alpha)
+    root_x = xs[ys.argmin()]  # the topmost pixel is where it hangs from; a twig further right is dropped
+    return img.crop((xs.min(), ys.min(), root_x + 4, ys.max() + 1))
+
+
 def pad(src, keep_aspect=False):
     """keep_aspect: scale to height H at the painting's own aspect (the wide battlefield) instead of W x H."""
     img = Image.open(src).convert("RGB")
+    if src.endswith("forest.png"):
+        img = lift_ivy(img)
     width = round(H * img.width / img.height) if keep_aspect else W
     img = img.resize((width, H), Image.LANCZOS)
     if src.endswith("ice.png"):
@@ -138,8 +178,9 @@ def road_layer(padded):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for name in ("shrine", "isles", "volcano", "ice"):
+    for name in ("shrine", "isles", "volcano", "ice", "forest", "space", "neon"):
         pad(os.path.join(REF, name + ".png")).save(os.path.join(OUT, "Bg_" + name + ".png"))
+    ivy().save(os.path.join(OUT, "Ivy.png"))
     battlefield = pad(os.path.join(REF, "battlefield.png"), keep_aspect=True)  # ultrawide: 2105 x 893 painting
     battlefield.save(os.path.join(OUT, "Bg_battlefield.png"))
     road_layer(battlefield).save(os.path.join(OUT, "Bg_battlefield_road.png"))

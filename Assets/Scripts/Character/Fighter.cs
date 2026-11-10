@@ -37,6 +37,11 @@ namespace StickDuel
         [SerializeField, Min(0f)] private float lungeSpeed = 6.5f;
         [SerializeField, Min(0f)] private float lungeDuration = 0.16f;
 
+        [Header("Vines")]
+        [SerializeField, Min(0f)] private float climbSpeed = 3.2f;
+        [Tooltip("After letting go of a vine, how long before it (or another) can be taken hold of again.")]
+        [SerializeField, Min(0f)] private float regrabDelay = 0.4f;
+
         [Header("Roll")]
         [SerializeField, Min(0f)] private float rollSpeed = 8.5f;
         [SerializeField, Min(0.05f)] private float rollDuration = 0.42f;
@@ -92,6 +97,10 @@ namespace StickDuel
         [NonSerialized] public float damageScale = 1f;
         /// <summary>Castle guards: their blades pass through each other's bodies.</summary>
         [NonSerialized] public bool isGuard;
+        /// <summary>+1 up, -1 down: holding it in a <see cref="ClimbZone"/> takes hold of the vine and climbs it.</summary>
+        [NonSerialized] public float climbInput;
+        /// <summary>Off for bots, which would hang on forever.</summary>
+        [NonSerialized] public bool usesVines = true;
 
         public bool ControlsEnabled { get; set; } = true;
         public float Health { get; private set; }
@@ -101,6 +110,10 @@ namespace StickDuel
         public float MaxStamina => maxStamina;
         public bool IsDead { get; private set; }
         public bool IsGrounded { get; private set; }
+        /// <summary>The ivy being ridden, if any (see <see cref="SwingingIvy"/>).</summary>
+        public SwingingIvy Vine { get; private set; }
+        /// <summary>Hands on a vine: climbing one or swinging on the ivy. Drivers leave the aim alone (the hands reach the vine).</summary>
+        public bool IsHanging => Vine != null || climbZone != null;
         public int Facing { get; private set; } = 1;
         public float MoveSpeed => moveSpeed;
         public Rigidbody2D Body { get; private set; }
@@ -141,6 +154,11 @@ namespace StickDuel
         private bool kickLanded;
         private readonly Collider2D[] punchHits = new Collider2D[8];
         private readonly ContactPoint2D[] groundContacts = new ContactPoint2D[4];
+        private readonly Collider2D[] zoneHits = new Collider2D[8];
+        private Collider2D climbZone;
+        private float grabTime = -1f;
+        private float regrabTime = -1f;
+        private float gravityScale;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void ConfigureLayerCollisions()
@@ -175,6 +193,7 @@ namespace StickDuel
             };
             Health = maxHealth;
             Stamina = maxStamina;
+            gravityScale = Body.gravityScale;
             aimPoint = ShoulderPosition + new Vector2(Facing * 2f, 0f);
         }
 
@@ -185,6 +204,12 @@ namespace StickDuel
             if (IsDead)
             {
                 return;
+            }
+
+            if (IsHanging)
+            {
+                // Both hands up on the vine.
+                aimPoint = Vine != null ? Vine.HandHold : new Vector2(climbZone.bounds.center.x, Body.position.y + 1f);
             }
 
             // Swing the blade round behind you and you turn with it.
@@ -230,7 +255,7 @@ namespace StickDuel
             bool wasGrounded = IsGrounded;
             // Rising through a one-way platform still touches it; that must not count as landing
             // (it handed out a second jump mid-air).
-            IsGrounded = Body.IsTouching(groundFilter) && Body.linearVelocity.y <= 0.5f + SlopeRise();
+            IsGrounded = !IsHanging && Body.IsTouching(groundFilter) && Body.linearVelocity.y <= 0.5f + SlopeRise();
             if (IsGrounded && !wasGrounded && Fx.Instance != null)
             {
                 Fx.Instance.Land(Body.position + Vector2.down * HipHeight);
@@ -247,6 +272,17 @@ namespace StickDuel
             UpdatePunch(dt);
             UpdateKick(dt);
             bool canAct = ControlsEnabled && staggerTimer <= 0f;
+            if (!IsHanging && canAct && !IsGrounded && usesVines && climbInput != 0f && Time.time >= regrabTime)
+            {
+                climbZone = ZoneAt(Body.position);
+            }
+
+            if (IsHanging)
+            {
+                Hang(dt);
+                return;
+            }
+
             Vector2 velocity = Body.linearVelocity;
 
             if (rollTimer > 0f)
@@ -277,6 +313,98 @@ namespace StickDuel
             velocity.x = Mathf.Clamp(velocity.x, -maxSpeed, maxSpeed);
             velocity.y = Mathf.Min(velocity.y, jumpVelocity * 1.1f);
             Body.linearVelocity = velocity;
+        }
+
+        private Collider2D ZoneAt(Vector2 point)
+        {
+            var filter = new ContactFilter2D { useTriggers = true };
+            int count = Physics2D.OverlapPoint(point, filter, zoneHits);
+            for (int i = 0; i < count; i++)
+            {
+                if (zoneHits[i].GetComponent<ClimbZone>() != null)
+                {
+                    return zoneHits[i];
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// On a vine, instead of walking and jumping. Climbing: W/S move up and down it, A/D hop off
+        /// sideways, and over its top you step onto the ledge above. Riding the ivy: the hip hangs
+        /// under its tip; a fresh W press jumps off with its momentum, S drops off.
+        /// </summary>
+        private void Hang(float dt)
+        {
+            Body.gravityScale = 0f;
+            Vector2 velocity;
+            if (Vine != null)
+            {
+                Vector2 target = Vine.Tip + Vector2.up * SwingingIvy.RiderLift;
+                velocity = Vector2.ClampMagnitude((target - Body.position) / dt, 30f);
+                bool jump = Time.time - jumpRequestTime <= jumpBuffer && Time.time > grabTime + 0.25f;
+                if (jump || climbInput < 0f)
+                {
+                    velocity = Vine.TipVelocity + (jump ? Vector2.up * jumpVelocity * 0.75f : Vector2.zero);
+                    LetGo();
+                    if (jump)
+                    {
+                        jumpRequestTime = -1f;
+                        Jumped?.Invoke(this);
+                    }
+                }
+            }
+            else
+            {
+                Bounds zone = climbZone.bounds;
+                float feet = Body.position.y - HipHeight;
+                velocity = new Vector2(Mathf.Clamp((zone.center.x - Body.position.x) * 12f, -moveSpeed, moveSpeed), climbInput * climbSpeed);
+                if (velocity.y < 0f && feet <= zone.min.y)
+                {
+                    velocity.y = 0f; // the vine ends here: hang on
+                }
+
+                if (feet >= zone.max.y)
+                {
+                    velocity.y = 3f; // over the top: onto the ledge
+                    LetGo();
+                }
+                else if (Mathf.Abs(moveInput) > 0.5f)
+                {
+                    velocity = new Vector2(Mathf.Sign(moveInput) * moveSpeed, jumpVelocity * 0.5f);
+                    LetGo();
+                }
+            }
+
+            Body.linearVelocity = velocity;
+        }
+
+        /// <summary>The ivy's tip reached this fighter: takes hold if in the air and free to.</summary>
+        public bool TryGrab(SwingingIvy ivy)
+        {
+            if (!usesVines || !ControlsEnabled || IsDead || IsGrounded || IsHanging || Time.time < regrabTime)
+            {
+                return false;
+            }
+
+            Vine = ivy;
+            grabTime = Time.time;
+            jumpRequestTime = -1f; // the jump that got here must not also jump off
+            return true;
+        }
+
+        private void LetGo()
+        {
+            Drop();
+            regrabTime = Time.time + regrabDelay;
+        }
+
+        private void Drop()
+        {
+            Vine = null;
+            climbZone = null;
+            Body.gravityScale = gravityScale;
         }
 
         /// <summary>
@@ -487,6 +615,11 @@ namespace StickDuel
             }
 
             Health = Mathf.Max(0f, Health - damage);
+            if (IsHanging)
+            {
+                LetGo(); // a hit knocks you off the vine
+            }
+
             Body.linearVelocity = new Vector2(Body.linearVelocity.x * 0.3f, Mathf.Max(Body.linearVelocity.y, 0f));
             Body.AddForce(knockback, ForceMode2D.Impulse);
             staggerTimer = 0.18f + damage * 0.005f;
@@ -516,6 +649,7 @@ namespace StickDuel
 
             IsDead = true;
             Health = 0f;
+            Drop();
             Body.constraints = RigidbodyConstraints2D.None;
             float pushDirection = Mathf.Abs(Body.linearVelocity.x) > 0.1f ? Mathf.Sign(Body.linearVelocity.x) : -Facing;
             Body.AddTorque(-pushDirection * 4f, ForceMode2D.Impulse);
@@ -548,6 +682,9 @@ namespace StickDuel
             punchTimer = 0f;
             kickTimer = 0f;
             jumpRequestTime = -1f;
+            climbInput = 0f;
+            regrabTime = -1f;
+            Drop();
 
             Body.constraints = RigidbodyConstraints2D.FreezeRotation;
             Body.linearVelocity = Vector2.zero;

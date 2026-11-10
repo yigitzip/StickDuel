@@ -6,7 +6,8 @@ namespace StickDuel
     /// <summary>
     /// Keyboard + mouse (or gamepad) → Fighter input. Hold left mouse to charge a shuriken throw;
     /// right click throws the katana at the cursor (or punches when it is gone), and walking over
-    /// the fallen katana picks it back up. Q / E roll left / right, Space kicks.
+    /// the fallen katana picks it back up. Q / E roll left / right, Space kicks. Holding W / S in
+    /// a vine's reach climbs it.
     /// </summary>
     [RequireComponent(typeof(Fighter))]
     public sealed class PlayerDriver : MonoBehaviour
@@ -81,6 +82,7 @@ namespace StickDuel
         private void Update()
         {
             float move = 0f;
+            float climb = 0f;
             bool jump = false;
             bool backGuard = false;
             bool thrust = false;
@@ -91,6 +93,8 @@ namespace StickDuel
                 if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) move -= 1f;
                 if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) move += 1f;
                 jump |= keyboard.wKey.wasPressedThisFrame || keyboard.upArrowKey.wasPressedThisFrame;
+                if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) climb += 1f;
+                if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) climb -= 1f;
                 if (keyboard.spaceKey.wasPressedThisFrame) fighter.Kick();
                 thrust |= keyboard.leftShiftKey.isPressed;
                 if (keyboard.qKey.wasPressedThisFrame) fighter.Roll(-1);
@@ -102,6 +106,7 @@ namespace StickDuel
             if (gamepad != null)
             {
                 move += gamepad.leftStick.x.ReadValue();
+                climb += gamepad.leftStick.y.ReadValue();
                 jump |= gamepad.buttonSouth.wasPressedThisFrame;
                 backGuard |= gamepad.rightShoulder.isPressed;
                 thrust |= gamepad.rightTrigger.isPressed;
@@ -132,12 +137,17 @@ namespace StickDuel
             fighter.thrustHeld = thrust;
 
             fighter.moveInput = Mathf.Clamp(move, -1f, 1f);
+            fighter.climbInput = Mathf.Clamp(climb, -1f, 1f);
             if (jump)
             {
                 fighter.RequestJump();
             }
 
-            if (usingGamepadAim)
+            if (fighter.IsHanging)
+            {
+                // The hands are on the vine; Fighter aims them there.
+            }
+            else if (usingGamepadAim)
             {
                 fighter.aimPoint = fighter.ShoulderPosition + stickAim * stickAimDistance;
             }

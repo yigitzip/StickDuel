@@ -12,7 +12,7 @@ namespace StickDuel
     /// <summary>
     /// Main menu (weapon + arena select) and the arenas. Each arena is one painted background
     /// (Resources/Arena, made by Tools/prepare_backgrounds.py from Tools/reference) with
-    /// colliders laid over what is painted: floors, ledges, a hazard pit. The scene's own
+    /// colliders laid over what is painted: floors, ledges, a hazard pit, vines to climb and swing on. The scene's own
     /// environment is hidden. The match is held back until FIGHT; Esc in game reloads the
     /// scene and comes back here. Creates itself on scene load, so the scene file needs no changes.
     /// </summary>
@@ -22,6 +22,8 @@ namespace StickDuel
         private const float PaintingWidth = 1600f;
         private const float PadTop = 320f, PadBottom = 160f, PadSide = 200f;
         private const float PixelsPerUnit = 92f; // fighters stand about as tall as the painted lanterns
+        private const float IvyPixelsPerUnit = PixelsPerUnit * 2752f / 1600f; // Arena/Ivy keeps the forest's full resolution
+        private const float ClimbWidth = 0.9f;   // how far either side of a vine it can be taken hold of
         private const float HalfWidth = PaintingWidth * 0.5f / PixelsPerUnit;
         private const float FirstIcicle = 3f;      // seconds into each round
         private const float IcicleInterval = 5f;   // then every this many seconds
@@ -39,6 +41,10 @@ namespace StickDuel
             public float GroundRow;
             public Vector3[] Floors = new Vector3[0];  // solid (x0, x1, top)
             public Vector3[] Ledges = new Vector3[0];  // one-way (x0, x1, top): jump up through, land on top
+            public Vector3[] Climbs = new Vector3[0];  // vines to climb (x, top row, bottom row); see ClimbZone
+            public Vector2 Ivy;                        // the swinging ivy's anchor; none when zero (see SwingingIvy)
+            public Vector2 Spawns;                     // painting columns the player and the enemy start on; zero keeps the scene's (±3 units)
+            public bool Laser;                         // a laser beam comes down on the floor now and then (see FallingLaser)
             public Vector2[] Glows = new Vector2[0];
             public Color GlowColor;
             public float GlowSize = 2.5f;
@@ -97,6 +103,36 @@ namespace StickDuel
                 Floors = new[] { new Vector3(0f, 1600f, 686f), new Vector3(0f, 75f, 605f), new Vector3(1525f, 1600f, 605f) },
                 Icicles = true,
                 Motes = new Color(0.9f, 0.97f, 1f, 0.9f), MotesVelocity = new Vector2(-0.25f, -0.7f), MotesRow = -120f, MotesRate = 35f, MotesLifetime = 14f,
+            },
+            new Arena
+            {
+                // Measured off Tools/reference/forest_guide.png. The side logs reach 32 px past their painted
+                // ends so the ivy's full swing lands squarely on them; their vines hang under them.
+                Name = "MISTY FOREST", Blurb = "Climb the vines, swing the ivy", Texture = "Bg_forest", GroundRow = 736f,
+                Floors = new[] { new Vector3(409f, 1217f, 736f) },
+                Ledges = new[] { new Vector3(19f, 334f, 484f), new Vector3(1277f, 1598f, 480f) },
+                Climbs = new[] { new Vector3(208f, 470f, 881f), new Vector3(1404f, 466f, 879f) },
+                Ivy = new Vector2(801f, 21f),
+                Motes = new Color(0.75f, 1f, 0.6f, 0.8f), MotesVelocity = new Vector2(0.05f, 0.25f), MotesRow = 520f, MotesRate = 12f, MotesLifetime = 8f,
+            },
+            new Arena
+            {
+                // Measured off Tools/reference/space_guide.png: three lower decks over a drop, five
+                // one-way walkways above, a truss ladder up the left edge. Fighters start a deck apart.
+                Name = "ORBITAL DOCK", Blurb = "Decks over the drop, a ladder up the left", Texture = "Bg_space", GroundRow = 558f,
+                Floors = new[] { new Vector3(69f, 430f, 558f), new Vector3(1192f, 1541f, 558f), new Vector3(550f, 1058f, 583f) },
+                Ledges = new[] { new Vector3(43f, 217f, 289f), new Vector3(281f, 485f, 250f), new Vector3(559f, 1072f, 218f), new Vector3(1165f, 1364f, 241f), new Vector3(1430f, 1599f, 288f) },
+                Climbs = new[] { new Vector3(64f, 275f, 572f) },
+                Spawns = new Vector2(380f, 1240f),
+                Motes = new Color(0.8f, 0.9f, 1f, 0.7f), MotesVelocity = new Vector2(-0.08f, 0.06f), MotesRow = 400f, MotesRate = 8f, MotesLifetime = 10f,
+            },
+            new Arena
+            {
+                // Measured off Tools/reference/neon_guide.png: one flat deck across the whole painting.
+                Name = "NEON DISTRICT", Blurb = "A laser rakes the deck", Texture = "Bg_neon", GroundRow = 580f,
+                Floors = new[] { new Vector3(0f, 1600f, 580f) },
+                Laser = true,
+                Motes = new Color(1f, 0.5f, 0.9f, 0.8f), MotesVelocity = new Vector2(0.05f, 0.2f), MotesRow = 450f, MotesRate = 10f, MotesLifetime = 7f,
             },
         };
 
@@ -261,7 +297,12 @@ namespace StickDuel
             CastleLevel castle = castleRun ? BuildCastle() : null;
             if (!castleRun)
             {
-                Build(mode == Mode.Endless ? Battlefield : All[selectedMap]);
+                Arena arena = mode == Mode.Endless ? Battlefield : All[selectedMap];
+                Build(arena);
+                if (arena.Spawns != Vector2.zero)
+                {
+                    duel.SetSpawns(World(arena.Spawns.x, 0f, arena).x, World(arena.Spawns.y, 0f, arena).x);
+                }
             }
 
             Fighter player = duel.Player;
@@ -357,6 +398,23 @@ namespace StickDuel
                 effector.surfaceArc = 160f;
             }
 
+            foreach (Vector3 climb in arena.Climbs)
+            {
+                var go = new GameObject("Vine") { layer = 2 }; // Ignore Raycast: aim lines and AI ground checks see through it
+                go.transform.SetParent(root, false);
+                Vector2 top = World(climb.x, climb.y, arena), bottom = World(climb.x, climb.z, arena);
+                go.transform.position = (top + bottom) * 0.5f;
+                var box = go.AddComponent<BoxCollider2D>();
+                box.isTrigger = true;
+                box.size = new Vector2(ClimbWidth, top.y - bottom.y);
+                go.AddComponent<ClimbZone>();
+            }
+
+            if (arena.Ivy != Vector2.zero)
+            {
+                SwingingIvy.Create(root, World(arena.Ivy.x, arena.Ivy.y, arena), IvyPixelsPerUnit);
+            }
+
             // Invisible walls at the painting's edges.
             foreach (int side in new[] { -1, 1 })
             {
@@ -380,6 +438,11 @@ namespace StickDuel
             if (arena.Pieces.Length > 0)
             {
                 BuildLavaSea(root, arena);
+            }
+
+            if (arena.Laser)
+            {
+                FallingLaser.Create(root, -HalfWidth, HalfWidth, () => RoundLive);
             }
         }
 
@@ -680,16 +743,19 @@ namespace StickDuel
             }
 
             mapRowTitle = UiText(menu.transform, font, "CHOOSE YOUR ARENA", 34, new Vector2(0f, -10f), Color.white);
+            // The row must fit a 16:10 screen like the weapon row (about 1700 reference units), so the cards shrink with the count.
+            float arenaSpacing = Mathf.Min(440f, 1700f / All.Length);
+            float arenaWidth = arenaSpacing - 30f;
             for (int i = 0; i < All.Length; i++)
             {
                 int index = i;
                 Arena arena = All[i];
-                Image card = Card(arena.Name, new Vector2((i - 1.5f) * 440f, -195f), new Vector2(410f, 290f), new Color(0.16f, 0.13f, 0.22f), () => SelectMap(index));
+                Image card = Card(arena.Name, new Vector2((i - (All.Length - 1) * 0.5f) * arenaSpacing, -195f), new Vector2(arenaWidth, 290f), new Color(0.16f, 0.13f, 0.22f), () => SelectMap(index));
                 var texture = Resources.Load<Texture2D>("Arena/" + arena.Texture);
-                Image picture = UiImage("Preview", card.transform, Color.white, new Vector2(0f, 30f), new Vector2(390f, 218f));
+                Image picture = UiImage("Preview", card.transform, Color.white, new Vector2(0f, 40f), new Vector2(arenaWidth - 20f, (arenaWidth - 20f) * 218f / 390f));
                 picture.sprite = Sprite.Create(texture, new Rect(PadSide, PadBottom, PaintingWidth, texture.height - PadTop - PadBottom), new Vector2(0.5f, 0.5f));
-                UiText(card.transform, font, arena.Name, 30, new Vector2(0f, -100f), Color.white);
-                UiText(card.transform, font, arena.Blurb, 19, new Vector2(0f, -128f), new Color(1f, 1f, 1f, 0.7f));
+                UiText(card.transform, font, arena.Name, arenaWidth >= 400f ? 30 : arenaWidth >= 300f ? 26 : 22, new Vector2(0f, -84f), Color.white);
+                UiText(card.transform, font, arena.Blurb, arenaWidth >= 400f ? 19 : arenaWidth >= 300f ? 17 : 15, new Vector2(0f, -118f), new Color(1f, 1f, 1f, 0.7f), arenaWidth - 16f);
                 mapOutlines.Add(card.GetComponent<Outline>());
                 arenaCards.Add(card.gameObject);
             }

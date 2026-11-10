@@ -46,6 +46,13 @@ namespace StickDuel
         public int EnemyScore => enemyScore;
         public Fighter Player => player;
         public Fighter Enemy => enemy;
+
+        /// <summary>Where the fighters start each round, when the arena's floor is not where the scene's is.</summary>
+        public void SetSpawns(float playerX, float enemyX)
+        {
+            playerSpawn.x = playerX;
+            enemySpawn.x = enemyX;
+        }
         /// <summary>Off = a run mode (StormTheCastleMode, EndlessSurvivalMode) runs the flow; the HUD bars still update.</summary>
         public bool RunMatch { get; set; } = true;
 

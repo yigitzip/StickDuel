@@ -9,7 +9,7 @@ namespace StickDuel.EditorTools
     /// Lets an external tool drive the open editor for quick checks: write one command to
     /// Temp/bridge_in.txt, the result is appended to Temp/bridge_out.txt.
     /// Commands: refresh | reimport &lt;folder&gt; | play | stop | shot &lt;png path&gt; | start &lt;weapon&gt; &lt;map&gt; | autoplayer | slow &lt;scale&gt;
-    /// | survival | endless | castleshot &lt;png&gt; [ppu] | restart | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
+    /// | survival | endless | castleshot &lt;png&gt; [ppu] | restart | freeze | laser [x] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
     /// </summary>
     [InitializeOnLoad]
     public static class TestBridge
@@ -193,6 +193,31 @@ namespace StickDuel.EditorTools
                     jumps = 0;
                     jumpUntil = EditorApplication.timeSinceStartup + 0.45; // still rising (apex ~0.59 s at game speed 0.8)
                     return "ok";
+                case "freeze":
+                    // The enemy stands still and stops swinging (its blade would knock an idle player about).
+                    var frozen = UnityEngine.Object.FindAnyObjectByType<DuelManager>().Enemy;
+                    frozen.ControlsEnabled = false;
+                    frozen.GetComponent<AIDriver>().enabled = false;
+                    return "ok";
+                case "laser":
+                    // Bring the arena's laser down now: laser [x]
+                    var beam = UnityEngine.Object.FindAnyObjectByType<FallingLaser>();
+                    if (beam == null) return "no laser in this arena";
+                    beam.Fire(parts.Length > 1 ? float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture) : (float?)null);
+                    return "ok";
+                case "jump":
+                    // One jump press on the player (also jumps off the ivy).
+                    UnityEngine.Object.FindAnyObjectByType<DuelManager>().Player.RequestJump();
+                    return "ok";
+                case "climb":
+                    // Hold W (1) / S (-1) / nothing (0) on the player, ignoring the keyboard: takes hold of and climbs a vine.
+                    var climber = UnityEngine.Object.FindAnyObjectByType<DuelManager>().Player;
+                    climber.GetComponent<PlayerDriver>().enabled = false;
+                    climber.climbInput = float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+                    return "ok";
+                case "hang":
+                    var hanger = UnityEngine.Object.FindAnyObjectByType<DuelManager>().Player;
+                    return $"hanging {hanger.IsHanging} ivy {(hanger.Vine != null)} grounded {hanger.IsGrounded} pos {hanger.Body.position} vel {hanger.Body.linearVelocity}";
                 case "stopmove":
                     if (jumper != null) jumper.moveInput = 0f;
                     return "ok";
