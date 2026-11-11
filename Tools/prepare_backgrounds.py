@@ -1,7 +1,7 @@
 """Turns the painted arena references in Tools/reference into in-game backgrounds.
 
 Run from repo root:  python3 Tools/prepare_backgrounds.py
-Each 1600x893 painting (the 2752x1536 forest, space and neon ones are scaled down) gets padding so the camera never sees past it: the sky is
+Each 1600x893 painting (the 2752x1536 forest, space, neon and deserted ones are scaled down) gets padding so the camera never sees past it: the sky is
 stretched upwards, the ground mirrored downwards and the sides mirrored outwards.
 Arenas.cs places them at 92 px/unit with the playable ground row at world y=0, and
 knows the padding below (keep PAD_* in sync with it).
@@ -132,6 +132,15 @@ def ivy():
     return img.crop((xs.min(), ys.min(), root_x + 4, ys.max() + 1))
 
 
+# Deserted: deserted_guide.png is the collision reference the numbers in Arenas.cs were measured from
+# (red = floors, green = the ladder, pink = where the missiles come in). The missile flies in game
+# (Arenas.cs MissileHazard), so it is cut out of deserted_missile.png at the painting's full resolution.
+def missile():
+    img = Image.open(os.path.join(REF, "deserted_missile.png")).convert("RGBA")
+    ys, xs = np.nonzero(np.asarray(img)[..., 3] > 0)
+    return img.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
+
+
 def pad(src, keep_aspect=False):
     """keep_aspect: scale to height H at the painting's own aspect (the wide battlefield) instead of W x H."""
     img = Image.open(src).convert("RGB")
@@ -178,9 +187,10 @@ def road_layer(padded):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for name in ("shrine", "isles", "volcano", "ice", "forest", "space", "neon"):
+    for name in ("shrine", "isles", "volcano", "ice", "forest", "space", "neon", "deserted"):
         pad(os.path.join(REF, name + ".png")).save(os.path.join(OUT, "Bg_" + name + ".png"))
     ivy().save(os.path.join(OUT, "Ivy.png"))
+    missile().save(os.path.join(OUT, "Missile.png"))
     battlefield = pad(os.path.join(REF, "battlefield.png"), keep_aspect=True)  # ultrawide: 2105 x 893 painting
     battlefield.save(os.path.join(OUT, "Bg_battlefield.png"))
     road_layer(battlefield).save(os.path.join(OUT, "Bg_battlefield_road.png"))

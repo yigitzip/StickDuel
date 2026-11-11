@@ -12,7 +12,7 @@ namespace StickDuel
     /// <summary>
     /// Main menu (weapon + arena select) and the arenas. Each arena is one painted background
     /// (Resources/Arena, made by Tools/prepare_backgrounds.py from Tools/reference) with
-    /// colliders laid over what is painted: floors, ledges, a hazard pit, vines to climb and swing on. The scene's own
+    /// colliders laid over what is painted: floors, ledges, a hazard pit, vines to climb and swing on, missiles flying across. The scene's own
     /// environment is hidden. The match is held back until FIGHT; Esc in game reloads the
     /// scene and comes back here. Creates itself on scene load, so the scene file needs no changes.
     /// </summary>
@@ -22,7 +22,7 @@ namespace StickDuel
         private const float PaintingWidth = 1600f;
         private const float PadTop = 320f, PadBottom = 160f, PadSide = 200f;
         private const float PixelsPerUnit = 92f; // fighters stand about as tall as the painted lanterns
-        private const float IvyPixelsPerUnit = PixelsPerUnit * 2752f / 1600f; // Arena/Ivy keeps the forest's full resolution
+        private const float FullResPixelsPerUnit = PixelsPerUnit * 2752f / 1600f; // Arena/Ivy and Arena/Missile keep their paintings' full resolution
         private const float ClimbWidth = 0.9f;   // how far either side of a vine it can be taken hold of
         private const float HalfWidth = PaintingWidth * 0.5f / PixelsPerUnit;
         private const float FirstIcicle = 3f;      // seconds into each round
@@ -45,6 +45,7 @@ namespace StickDuel
             public Vector2 Ivy;                        // the swinging ivy's anchor; none when zero (see SwingingIvy)
             public Vector2 Spawns;                     // painting columns the player and the enemy start on; zero keeps the scene's (±3 units)
             public bool Laser;                         // a laser beam comes down on the floor now and then (see FallingLaser)
+            public Vector2[] Missiles = new Vector2[0]; // missiles fly in across the arena from these painting spots, one at a time (see MissileHazard)
             public Vector2[] Glows = new Vector2[0];
             public Color GlowColor;
             public float GlowSize = 2.5f;
@@ -133,6 +134,24 @@ namespace StickDuel
                 Floors = new[] { new Vector3(0f, 1600f, 580f) },
                 Laser = true,
                 Motes = new Color(1f, 0.5f, 0.9f, 0.8f), MotesVelocity = new Vector2(0.05f, 0.2f), MotesRow = 450f, MotesRate = 10f, MotesLifetime = 7f,
+            },
+            new Arena
+            {
+                // Measured off Tools/reference/deserted_guide.png: stepped ground over the wrecks either
+                // side, a scaffold in the middle (solid lower deck, one-way upper deck, a ladder between),
+                // and missiles coming in at three heights from either edge. Fighters start on the wrecks' roofs.
+                Name = "DESERTED", Blurb = "Missiles rake the base", Texture = "Bg_deserted", GroundRow = 575f,
+                Floors = new[]
+                {
+                    new Vector3(0f, 126f, 642f), new Vector3(114f, 344f, 570f), new Vector3(328f, 401f, 586f), new Vector3(374f, 535f, 632f),
+                    new Vector3(535f, 958f, 543f),
+                    new Vector3(958f, 1134f, 609f), new Vector3(1134f, 1256f, 577f), new Vector3(1256f, 1377f, 615f), new Vector3(1372f, 1460f, 653f), new Vector3(1456f, 1600f, 691f),
+                },
+                Ledges = new[] { new Vector3(697f, 944f, 378f) },
+                Climbs = new[] { new Vector3(819f, 364f, 543f) },
+                Spawns = new Vector2(229f, 1195f),
+                Missiles = new[] { new Vector2(19f, 338f), new Vector2(19f, 521f), new Vector2(19f, 618f), new Vector2(1578f, 331f), new Vector2(1578f, 499f), new Vector2(1578f, 643f) },
+                Motes = new Color(0.85f, 0.7f, 0.45f, 0.7f), MotesVelocity = new Vector2(0.4f, 0.05f), MotesRow = 600f, MotesRate = 10f, MotesLifetime = 8f,
             },
         };
 
@@ -412,7 +431,7 @@ namespace StickDuel
 
             if (arena.Ivy != Vector2.zero)
             {
-                SwingingIvy.Create(root, World(arena.Ivy.x, arena.Ivy.y, arena), IvyPixelsPerUnit);
+                SwingingIvy.Create(root, World(arena.Ivy.x, arena.Ivy.y, arena), FullResPixelsPerUnit);
             }
 
             // Invisible walls at the painting's edges.
@@ -443,6 +462,17 @@ namespace StickDuel
             if (arena.Laser)
             {
                 FallingLaser.Create(root, -HalfWidth, HalfWidth, () => RoundLive);
+            }
+
+            if (arena.Missiles.Length > 0)
+            {
+                var lanes = new Vector2[arena.Missiles.Length];
+                for (int i = 0; i < lanes.Length; i++)
+                {
+                    lanes[i] = World(arena.Missiles[i].x, arena.Missiles[i].y, arena);
+                }
+
+                MissileHazard.Create(root, lanes, HalfWidth, FullResPixelsPerUnit, () => RoundLive);
             }
         }
 

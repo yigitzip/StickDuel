@@ -9,7 +9,7 @@ namespace StickDuel.EditorTools
     /// Lets an external tool drive the open editor for quick checks: write one command to
     /// Temp/bridge_in.txt, the result is appended to Temp/bridge_out.txt.
     /// Commands: refresh | reimport &lt;folder&gt; | play | stop | shot &lt;png path&gt; | start &lt;weapon&gt; &lt;map&gt; | autoplayer | slow &lt;scale&gt;
-    /// | survival | endless | castleshot &lt;png&gt; [ppu] | restart | freeze | laser [x] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
+    /// | survival | endless | castleshot &lt;png&gt; [ppu] | restart | freeze | laser [x] | missile [lane] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
     /// </summary>
     [InitializeOnLoad]
     public static class TestBridge
@@ -204,6 +204,12 @@ namespace StickDuel.EditorTools
                     var beam = UnityEngine.Object.FindAnyObjectByType<FallingLaser>();
                     if (beam == null) return "no laser in this arena";
                     beam.Fire(parts.Length > 1 ? float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture) : (float?)null);
+                    return "ok";
+                case "missile":
+                    // Launch one of the arena's missiles now: missile [lane index]
+                    var launcher = UnityEngine.Object.FindAnyObjectByType<MissileHazard>();
+                    if (launcher == null) return "no missiles in this arena";
+                    launcher.Fire(parts.Length > 1 ? int.Parse(parts[1]) : (int?)null);
                     return "ok";
                 case "jump":
                     // One jump press on the player (also jumps off the ivy).
