@@ -9,7 +9,7 @@ namespace StickDuel.EditorTools
     /// Lets an external tool drive the open editor for quick checks: write one command to
     /// Temp/bridge_in.txt, the result is appended to Temp/bridge_out.txt.
     /// Commands: refresh | reimport &lt;folder&gt; | play | stop | shot &lt;png path&gt; | start &lt;weapon&gt; &lt;map&gt; | autoplayer | slow &lt;scale&gt;
-    /// | survival | endless | castleshot &lt;png&gt; [ppu] | restart | freeze | laser [x] | missile [lane] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
+    /// | survival | endless | castleshot &lt;png&gt; [ppu] | camshot &lt;png&gt; | restart | freeze | laser [x] | missile [lane] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
     /// </summary>
     [InitializeOnLoad]
     public static class TestBridge
@@ -97,6 +97,22 @@ namespace StickDuel.EditorTools
             return $"saved {width}x{height}";
         }
 
+        private static string CamShot(string path)
+        {
+            Camera cam = Camera.main;
+            var rt = new RenderTexture(1600, 900, 24);
+            cam.targetTexture = rt;
+            cam.Render();
+            RenderTexture.active = rt;
+            var image = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+            image.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            RenderTexture.active = null;
+            cam.targetTexture = null;
+            File.WriteAllBytes(path, image.EncodeToPNG());
+            UnityEngine.Object.Destroy(rt);
+            return "saved";
+        }
+
         private static string Run(string command)
         {
             string[] parts = command.Split(' ');
@@ -137,6 +153,9 @@ namespace StickDuel.EditorTools
                     else if (endless != null) endless.Restart();
                     else UnityEngine.Object.FindAnyObjectByType<DuelManager>().Restart();
                     return "ok";
+                case "camshot":
+                    // The game camera's current view to a 1600x900 PNG, even with the Game view hidden: camshot <path>
+                    return CamShot(parts[1]);
                 case "castleshot":
                     // Render the whole Survival castle (no fighters) to a PNG: castleshot <path> [pixels per unit]
                     return CastleShot(parts[1], parts.Length > 2 ? int.Parse(parts[2]) : 32);

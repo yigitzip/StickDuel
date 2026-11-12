@@ -29,6 +29,44 @@ namespace StickDuel
         private const float IcicleInterval = 5f;   // then every this many seconds
         private const float IcicleHeight = 9f; // just above the top of the view
 
+        // Train arena (Tools/prepare_backgrounds.py train()). Its numbers are pixels of the 10100x8007
+        // Tools/reference/train_guide.png canvas, which Arena/Train and Arena/TrainGuide are cut from.
+        private const float TrainPixelsPerUnit = 140f;                  // the sheet shrunk so a boxcar stands about one and a half fighters tall
+        private const float TrainCropLeft = 770f, TrainCropTop = 470f;  // TRAIN_CROP's corner
+        private const float TrainTextureScale = 100f / 140f;            // TRAIN_SCALE: the textures are stored smaller than the sheet, to fit 4096 px
+        private const float TrainCentre = 3492f, TrainRoof = 629f;      // world x = 0 and y = 0: the train's middle, the boxcar roofs
+        private const float TrainLeft = 800f, TrainRight = 6150f;       // the cowcatcher and the flatcar's end: the camera and the bot stay between
+        private const float TrainWheels = 1024f;                        // the wheels' lowest row
+        private const float TrainDeckBottom = 940f;                     // the stand-on boxes reach down to here, under the decks
+        // The two scrolling layers (2752x1536 paintings at full size): wheels on BackdropWheelRow, and the camera never
+        // goes lower than BackdropFloor above their ragged bottom edge or higher than the far layer's top.
+        private const float BackdropPixelsPerUnit = 100f, BackdropHeight = 1536f, BackdropWheelRow = 1450f, BackdropFloor = 40f;
+        private const float FarSpeed = 0.8f, NearSpeed = 7f;            // how fast the layers slide right (units a second)
+        private const float FarFollow = 0.9f, NearFollow = 0.6f;        // how much they follow the camera sideways (parallax)
+
+        /// <summary>Red lines of train_guide.png as (x0, x1, top): roofs, the low gaps between the cars, the flatcar's deck and cargo.</summary>
+        private static readonly Vector3[] TrainFloors =
+        {
+            new Vector3(1048f, 1148f, 492f),                                                             // chimney
+            new Vector3(1135f, 1232f, 639f), new Vector3(1228f, 1306f, 566f), new Vector3(1302f, 1398f, 645f), // boiler, sand dome, boiler
+            new Vector3(1396f, 1484f, 549f), new Vector3(1480f, 1574f, 639f),                            // steam dome, boiler
+            new Vector3(1572f, 1900f, 579f),                                                             // cab roof
+            new Vector3(1896f, 2009f, 862f),                                                             // gap behind the cab
+            new Vector3(2005f, 2580f, 676f),                                                             // tender
+            new Vector3(2575f, 2672f, 794f),                                                             // gap
+            new Vector3(2668f, 3752f, 629f),                                                             // boxcar
+            new Vector3(3748f, 3848f, 778f),                                                             // gap
+            new Vector3(3844f, 4916f, 629f),                                                             // boxcar
+            new Vector3(4912f, 4990f, 812f), new Vector3(4986f, 5140f, 851f),                            // step down, gap
+            new Vector3(5136f, 5248f, 765f), new Vector3(5244f, 5392f, 686f), new Vector3(5388f, 5502f, 766f), // crates
+            new Vector3(5498f, 5728f, 853f),                                                             // flatcar deck
+            new Vector3(5724f, 5782f, 786f), new Vector3(5778f, 5994f, 734f),                            // small crate, barrels
+            new Vector3(5990f, 6140f, 859f),                                                             // flatcar deck
+        };
+
+        /// <summary>The cowcatcher's slope up to the smokebox, the guide's one slanted line.</summary>
+        private static readonly Vector2[] TrainSlope = { new Vector2(810f, 965f), new Vector2(967f, 583f), new Vector2(1060f, 585f) };
+
         /// <summary>
         /// One arena, measured in painting pixels (x right, y down from the top). GroundRow is the
         /// main floor and becomes world y = 0, where both fighters spawn.
@@ -66,6 +104,8 @@ namespace StickDuel
             public float RoadCut;
             /// <summary>Endless: the background is drawn this much smaller (pinned at the road's edge) so it looks further away.</summary>
             public float BackgroundScale = 1f;
+            /// <summary>Fought on the train (see BuildTrain): Texture is only the menu picture, Spawns are train_guide.png columns.</summary>
+            public bool Train;
         }
 
         /// <summary>How far the endless battlefield's floor reaches either way (hours of walking).</summary>
@@ -152,6 +192,14 @@ namespace StickDuel
                 Spawns = new Vector2(229f, 1195f),
                 Missiles = new[] { new Vector2(19f, 338f), new Vector2(19f, 521f), new Vector2(19f, 618f), new Vector2(1578f, 331f), new Vector2(1578f, 499f), new Vector2(1578f, 643f) },
                 Motes = new Color(0.85f, 0.7f, 0.45f, 0.7f), MotesVelocity = new Vector2(0.4f, 0.05f), MotesRow = 600f, MotesRate = 10f, MotesLifetime = 8f,
+            },
+            new Arena
+            {
+                // On the roofs of a train running left through the desert: the ground streams past behind it.
+                // Fighters start on the two boxcars.
+                Name = "DESERT TRAIN", Blurb = "Fight on the roofs of a running train", Texture = "TrainPreview", Train = true,
+                Spawns = new Vector2(3210f, 4380f),
+                Motes = new Color(0.85f, 0.7f, 0.5f, 0.6f), MotesVelocity = new Vector2(5f, 0.1f), MotesRate = 25f, MotesLifetime = 6f,
             },
         };
 
@@ -314,11 +362,15 @@ namespace StickDuel
 
             bool castleRun = mode == Mode.StormTheCastle;
             CastleLevel castle = castleRun ? BuildCastle() : null;
-            if (!castleRun)
+            Arena arena = castleRun ? null : mode == Mode.Endless ? Battlefield : All[selectedMap];
+            if (arena != null)
             {
-                Arena arena = mode == Mode.Endless ? Battlefield : All[selectedMap];
                 Build(arena);
-                if (arena.Spawns != Vector2.zero)
+                if (arena.Train)
+                {
+                    duel.SetSpawns(TrainWorld(arena.Spawns.x, TrainRoof).x, TrainWorld(arena.Spawns.y, TrainRoof).x);
+                }
+                else if (arena.Spawns != Vector2.zero)
                 {
                     duel.SetSpawns(World(arena.Spawns.x, 0f, arena).x, World(arena.Spawns.y, 0f, arena).x);
                 }
@@ -330,7 +382,8 @@ namespace StickDuel
             if (enemy.sword != null) WeaponFactory.Prepare(WeaponType.Sword, enemy)?.Equip(enemy);
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
-                ai.ArenaHalfWidth = HalfWidth;
+                if (arena != null && arena.Train) ai.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x);
+                else ai.ArenaHalfWidth = HalfWidth;
             }
 
             if (castleRun && duel.GetComponent<StormTheCastleMode>() == null)
@@ -384,6 +437,12 @@ namespace StickDuel
             if (arena.Endless)
             {
                 BuildEndless(root, arena);
+                return;
+            }
+
+            if (arena.Train)
+            {
+                BuildTrain(root, arena);
                 return;
             }
 
@@ -495,6 +554,70 @@ namespace StickDuel
                 float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit; // same zoom limit as the arenas
                 cam.GetComponent<CameraRig>().SetBounds(EndlessReach, halfView / Mathf.Max(cam.aspect, 0.5f));
             }
+        }
+
+        private static Vector2 TrainWorld(float px, float py) => new Vector2((px - TrainCentre) / TrainPixelsPerUnit, (TrainRoof - py) / TrainPixelsPerUnit);
+
+        /// <summary>
+        /// The train arena: the train stands still at the middle of the world while two painted layers
+        /// slide right behind it (see <see cref="Treadmill"/>), the far one slowly, the near one fast. The
+        /// colliders follow the red lines of train_guide.png, which is laid exactly over the train and then
+        /// switched off. The camera follows the fighters along the train but never shows past the layers'
+        /// top or bottom edge.
+        /// </summary>
+        private void BuildTrain(Transform root, Arena arena)
+        {
+            HideSceneSky();
+            float bottom = TrainWorld(0f, TrainWheels).y - (BackdropHeight - BackdropWheelRow) / BackdropPixelsPerUnit; // both layers' bottom edge
+            Sprite far = Backdrop("TrainFar");
+            Treadmill.Create(root, "FarLayer", far, -20, FarSpeed, FarFollow, bottom);
+            Treadmill.Create(root, "NearLayer", Backdrop("TrainNear"), -10, NearSpeed, NearFollow, bottom);
+            TrainSprite(root, "Train", "Train", 0);
+            GameObject guide = TrainSprite(root, "CollisionGuide", "TrainGuide", 1);
+
+            foreach (Vector3 floor in TrainFloors)
+            {
+                Box(root, "Floor", TrainWorld(floor.x, floor.z), TrainWorld(floor.y, 0f).x, (TrainDeckBottom - floor.z) / TrainPixelsPerUnit);
+            }
+
+            var slope = new GameObject("Cowcatcher");
+            slope.transform.SetParent(root, false);
+            slope.AddComponent<EdgeCollider2D>().points = System.Array.ConvertAll(TrainSlope, p => TrainWorld(p.x, p.y));
+            // No walls at the ends: off the front or the back of the train is a fall to death. (A wall at the
+            // front would trap a fighter in the notch under the cowcatcher's slope, which is too steep to climb.)
+
+            guide.SetActive(false); // the colliders are in: the guide was only there to lay them over
+
+            Particles(root, new Vector2(-8f, 2f), arena); // dust blowing back along the train
+            if (cam != null)
+            {
+                float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit; // same zoom limit as the arenas
+                float maxSize = halfView / Mathf.Max(cam.aspect, 0.5f);
+                var rig = cam.GetComponent<CameraRig>();
+                rig.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x, maxSize);
+                rig.MinY = bottom + BackdropFloor / BackdropPixelsPerUnit + maxSize;
+                rig.MaxY = bottom + far.bounds.size.y - maxSize;
+            }
+        }
+
+        /// <summary>A scrolling layer of the train arena, pivot at its bottom centre.</summary>
+        private static Sprite Backdrop(string texture)
+        {
+            var image = Resources.Load<Texture2D>("Arena/" + texture);
+            return Sprite.Create(image, new Rect(0f, 0f, image.width, image.height), new Vector2(0.5f, 0f), BackdropPixelsPerUnit);
+        }
+
+        /// <summary>Arena/Train or its guide (same size, same cut, same scale), pinned so both land on the same spot.</summary>
+        private static GameObject TrainSprite(Transform root, string name, string texture, int order)
+        {
+            var image = Resources.Load<Texture2D>("Arena/" + texture);
+            var sprite = new GameObject(name).AddComponent<SpriteRenderer>();
+            sprite.transform.SetParent(root, false);
+            sprite.sprite = Sprite.Create(image, new Rect(0f, 0f, image.width, image.height),
+                new Vector2((TrainCentre - TrainCropLeft) * TrainTextureScale / image.width, 1f - (TrainRoof - TrainCropTop) * TrainTextureScale / image.height),
+                TrainPixelsPerUnit * TrainTextureScale);
+            sprite.sortingOrder = order;
+            return sprite.gameObject;
         }
 
         /// <summary>Painting columns <paramref name="left"/>..<paramref name="right"/> (never the mirrored side padding, so tiles meet edge to edge), pivot on the ground row (or <paramref name="pivotRow"/>).</summary>
@@ -783,7 +906,9 @@ namespace StickDuel
                 Image card = Card(arena.Name, new Vector2((i - (All.Length - 1) * 0.5f) * arenaSpacing, -195f), new Vector2(arenaWidth, 290f), new Color(0.16f, 0.13f, 0.22f), () => SelectMap(index));
                 var texture = Resources.Load<Texture2D>("Arena/" + arena.Texture);
                 Image picture = UiImage("Preview", card.transform, Color.white, new Vector2(0f, 40f), new Vector2(arenaWidth - 20f, (arenaWidth - 20f) * 218f / 390f));
-                picture.sprite = Sprite.Create(texture, new Rect(PadSide, PadBottom, PaintingWidth, texture.height - PadTop - PadBottom), new Vector2(0.5f, 0.5f));
+                picture.sprite = arena.Train
+                    ? Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f)) // already just the picture
+                    : Sprite.Create(texture, new Rect(PadSide, PadBottom, PaintingWidth, texture.height - PadTop - PadBottom), new Vector2(0.5f, 0.5f));
                 UiText(card.transform, font, arena.Name, arenaWidth >= 400f ? 30 : arenaWidth >= 300f ? 26 : 22, new Vector2(0f, -84f), Color.white);
                 UiText(card.transform, font, arena.Blurb, arenaWidth >= 400f ? 19 : arenaWidth >= 300f ? 17 : 15, new Vector2(0f, -118f), new Color(1f, 1f, 1f, 0.7f), arenaWidth - 16f);
                 mapOutlines.Add(card.GetComponent<Outline>());

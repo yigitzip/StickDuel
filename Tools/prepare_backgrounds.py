@@ -141,6 +141,43 @@ def missile():
     return img.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
 
 
+# Train: the layers scroll past forever in Arenas.cs (Treadmill), so they keep their full 2752 px
+# width, trimmed of the transparent or black edge columns/rows that would show as a seam between copies.
+# The train and train_guide.png (red = what can be stood on; the numbers in Arenas.cs were measured
+# off it, in its own pixels) share one 10100x8007 canvas: both are cut to the same box (TRAIN_CROP,
+# Arenas.cs TrainCropLeft/Top) so they stay exactly on top of each other.
+TRAIN_CROP = (770, 470, 6215, 1030)
+TRAIN_SCALE = 100 / 140    # the train is stored at 100 px/unit, not the sheet's 140 (Arenas.cs TrainTextureScale): it fits 4096 px
+TRAIN_WHEEL_ROW = 1450     # backdrop row the wheels run on (Arenas.cs BackdropWheelRow)
+TRAIN_VIEW_FLOOR = 40      # the camera stays this far above the near layer's ragged bottom edge (Arenas.cs BackdropFloor)
+
+
+def train():
+    far = Image.open(os.path.join(REF, "train_far.png")).convert("RGBA").crop((0, 8, 2742, 1536))  # black top rows, clear right edge
+    near = Image.open(os.path.join(REF, "train_near.png")).convert("RGBA").crop((4, 655, 2752, 1536))  # clear left edge, empty sky
+    size = (round((TRAIN_CROP[2] - TRAIN_CROP[0]) * TRAIN_SCALE), round((TRAIN_CROP[3] - TRAIN_CROP[1]) * TRAIN_SCALE))
+    body = Image.open(os.path.join(REF, "train.png")).convert("RGBA").crop(TRAIN_CROP).resize(size, Image.LANCZOS)
+    guide = Image.open(os.path.join(REF, "train_guide.png")).convert("RGBA").crop(TRAIN_CROP).resize(size, Image.LANCZOS)
+    far.save(os.path.join(OUT, "TrainFar.png"))
+    near.save(os.path.join(OUT, "TrainNear.png"))
+    body.save(os.path.join(OUT, "Train.png"))
+    guide.save(os.path.join(OUT, "TrainGuide.png"))
+
+    # Menu card: the scene as the camera first frames it, two backdrop copies wide.
+    scene = Image.new("RGBA", (far.width * 2, far.height))
+    for i in range(2):
+        scene.alpha_composite(far, (i * far.width, 0))
+        scene.alpha_composite(near, (i * far.width, far.height - near.height))
+    small = body
+    wheels = round((1024 - TRAIN_CROP[1]) * TRAIN_SCALE)  # the train's lowest wheel row
+    scene.alpha_composite(small, (far.width - small.width // 2, TRAIN_WHEEL_ROW - 8 - wheels))
+    view_h = 1100
+    view_w = view_h * 16 // 9
+    left = far.width - view_w // 2
+    bottom = far.height - TRAIN_VIEW_FLOOR
+    return scene.crop((left, bottom - view_h, left + view_w, bottom)).convert("RGB").resize((1024, 576), Image.LANCZOS)
+
+
 def pad(src, keep_aspect=False):
     """keep_aspect: scale to height H at the painting's own aspect (the wide battlefield) instead of W x H."""
     img = Image.open(src).convert("RGB")
@@ -191,6 +228,7 @@ def main():
         pad(os.path.join(REF, name + ".png")).save(os.path.join(OUT, "Bg_" + name + ".png"))
     ivy().save(os.path.join(OUT, "Ivy.png"))
     missile().save(os.path.join(OUT, "Missile.png"))
+    train().save(os.path.join(OUT, "TrainPreview.png"))
     battlefield = pad(os.path.join(REF, "battlefield.png"), keep_aspect=True)  # ultrawide: 2105 x 893 painting
     battlefield.save(os.path.join(OUT, "Bg_battlefield.png"))
     road_layer(battlefield).save(os.path.join(OUT, "Bg_battlefield_road.png"))
