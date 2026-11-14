@@ -6,7 +6,7 @@ namespace StickDuel
     /// <summary>
     /// Thrown shuriken: follows an exact ballistic arc (<see cref="PositionAt"/>, shared with the aim
     /// line so the preview matches the flight), spinning, circle-casting each frame along the arc.
-    /// Hits the first fighter it touches, bounces off an enemy blade, sticks in the ground.
+    /// Hits the first fighter it touches, bounces off an enemy blade or a held shield, sticks in the ground.
     /// </summary>
     public sealed class Shuriken : MonoBehaviour
     {
@@ -129,7 +129,7 @@ namespace StickDuel
             Fighter victim = rb.GetComponent<Fighter>();
             if (victim != null)
             {
-                if (victim == owner || victim.IsDead || victim.IsRolling)
+                if (victim == owner || victim.IsDead || victim.IsRolling || (owner != null && owner.isGuard && victim.isGuard))
                 {
                     return false;
                 }
@@ -143,6 +143,21 @@ namespace StickDuel
                     Fx.Instance.Hit(hit.point, direction, victim.color, dealt, headshot);
                 }
 
+                Destroy(gameObject);
+                return true;
+            }
+
+            ShieldWeapon shield = rb.GetComponent<ShieldWeapon>();
+            if (shield != null && shield.IsHeld && shield.Owner != owner && !other.isTrigger)
+            {
+                // Glances off the face, now the shield bearer's: it can fly back into whoever shot it.
+                Vector2 bounced = Vector2.Reflect(velocity, shield.Face) * 0.6f;
+                if (Fx.Instance != null)
+                {
+                    Fx.Instance.Clash(hit.point, velocity.magnitude);
+                }
+
+                Launch(shield.Owner, hit.point + bounced.normalized * 0.2f, bounced, gravity, damage, GetComponent<SpriteRenderer>().sprite, pointFirst);
                 Destroy(gameObject);
                 return true;
             }

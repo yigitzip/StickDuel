@@ -230,7 +230,7 @@ namespace StickDuel
         private readonly List<GameObject> sniperMapCards = new List<GameObject>();
         private Text mapRowTitle;
         private readonly List<Outline> modeOutlines = new List<Outline>();
-        private enum Mode { Duel, StormTheCastle, Endless, Sniper }
+        private enum Mode { Duel, StormTheCastle, Endless, Sniper, Run }
 
         private Mode mode; // per scene load: Esc always comes back to Duel
 
@@ -360,6 +360,12 @@ namespace StickDuel
                 return;
             }
 
+            if (mode == Mode.Run)
+            {
+                StartRun(); // its own world, shield and bots, likewise
+                return;
+            }
+
             bool castleRun = mode == Mode.StormTheCastle;
             CastleLevel castle = castleRun ? BuildCastle() : null;
             Arena arena = castleRun ? null : mode == Mode.Endless ? Battlefield : All[selectedMap];
@@ -409,6 +415,26 @@ namespace StickDuel
             }
 
             duel.enabled = true; // its Start builds the HUD; SniperMode runs the round
+        }
+
+        /// <summary>RUN!: the mode builds its own endless field, hands out the shield and runs the flow.</summary>
+        private void StartRun()
+        {
+            environment.SetActive(false);
+            HideSceneSky();
+            if (duel.GetComponent<RunMode>() == null)
+            {
+                duel.gameObject.AddComponent<RunMode>().Init(duel);
+            }
+
+            duel.enabled = true; // its Start builds the HUD; RunMode runs the run
+        }
+
+        /// <summary>Skips the menu straight into RUN! (used by the editor test bridge).</summary>
+        public void StartRunMode()
+        {
+            SelectMode(Mode.Run);
+            Fight();
         }
 
         /// <summary>Skips the menu straight into Sniper Mode (for an editor test bridge).</summary>
@@ -870,7 +896,7 @@ namespace StickDuel
             UiText(menu.transform, font, "STICK DUEL", 96, new Vector2(0f, 420f), new Color(1f, 0.85f, 0.4f));
             UiText(menu.transform, font, "CHOOSE YOUR WEAPON", 34, new Vector2(0f, 310f), Color.white);
             Sprite katana = duel.Player.sword.GetComponent<SpriteRenderer>().sprite;
-            var weaponTypes = (WeaponType[])System.Enum.GetValues(typeof(WeaponType));
+            WeaponType[] weaponTypes = System.Array.FindAll((WeaponType[])System.Enum.GetValues(typeof(WeaponType)), WeaponTypeInfo.InMenu);
             // The row must fit a 16:10 screen too (about 1800 reference units wide), so the cards shrink with the count.
             float spacing = Mathf.Min(290f, 1700f / weaponTypes.Length);
             float cardWidth = spacing - 24f;
@@ -941,14 +967,15 @@ namespace StickDuel
                 (Mode.StormTheCastle, "STORM THE CASTLE", "Climb the castle, take the crown"),
                 (Mode.Endless, "ENDLESS SURVIVAL", "Hold out against the horde"),
                 (Mode.Sniper, "SNIPER MODE", "Rifles only, walls stop bullets"),
+                (Mode.Run, "RUN!", "Shield up, keep running"),
             };
             for (int i = 0; i < modes.Length; i++)
             {
                 Mode pick = modes[i].mode;
-                // Four cards fit left of FIGHT (which starts at x = 410).
-                Image card = Card(modes[i].title, new Vector2(-720f + i * 255f, -410f), new Vector2(240f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(pick));
-                UiText(card.transform, font, modes[i].title, modes[i].title.Length > 12 ? 20 : modes[i].title.Length > 8 ? 24 : 34, new Vector2(0f, 12f), Color.white);
-                UiText(card.transform, font, modes[i].blurb, 15, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f), 225f);
+                // Five cards fit left of FIGHT (which starts at x = 410).
+                Image card = Card(modes[i].title, new Vector2(-770f + i * 225f, -410f), new Vector2(212f, 86f), new Color(0.16f, 0.13f, 0.22f), () => SelectMode(pick));
+                UiText(card.transform, font, modes[i].title, modes[i].title.Length > 12 ? 18 : modes[i].title.Length > 8 ? 22 : 34, new Vector2(0f, 12f), Color.white);
+                UiText(card.transform, font, modes[i].blurb, 15, new Vector2(0f, -22f), new Color(1f, 1f, 1f, 0.65f), 200f);
                 modeOutlines.Add(card.GetComponent<Outline>());
             }
 
@@ -962,10 +989,10 @@ namespace StickDuel
         {
             mode = pick;
             Highlight(modeOutlines, (int)pick);
-            bool sniper = pick == Mode.Sniper;
-            foreach (GameObject card in arenaCards) card.SetActive(!sniper);
+            bool sniper = pick == Mode.Sniper, run = pick == Mode.Run;
+            foreach (GameObject card in arenaCards) card.SetActive(!sniper && !run);
             foreach (GameObject card in sniperMapCards) card.SetActive(sniper);
-            if (mapRowTitle != null) mapRowTitle.text = sniper ? "CHOOSE THE FIRST MAP" : "CHOOSE YOUR ARENA";
+            if (mapRowTitle != null) mapRowTitle.text = sniper ? "CHOOSE THE FIRST MAP" : run ? "RUN! GIVES YOU A SHIELD, NOTHING ELSE" : "CHOOSE YOUR ARENA";
         }
 
         private void SelectWeapon(WeaponType type)

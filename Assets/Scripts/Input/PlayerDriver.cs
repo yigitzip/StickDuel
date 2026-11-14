@@ -47,6 +47,9 @@ namespace StickDuel
         /// <summary>Sniper Mode: the rifle is the only weapon. No shuriken, no punch (right click still throws the rifle).</summary>
         public bool SniperOnly { get; set; }
 
+        /// <summary>RUN!: always running right, the shield the only gear (no shuriken, punch or throw; A / D do nothing).</summary>
+        public bool AutoRun { get; set; }
+
         public int ShurikenCount => shurikenCount;
         public int MaxShuriken => maxShuriken;
         /// <summary>0→1 while the empty set is refilling, 0 otherwise.</summary>
@@ -131,6 +134,11 @@ namespace StickDuel
                 }
             }
 
+            if (AutoRun)
+            {
+                move = 1f;
+            }
+
             UpdateThrow(mouse);
             PickUpSword();
             fighter.backGuard = backGuard;
@@ -202,9 +210,9 @@ namespace StickDuel
                 return;
             }
 
-            if (SniperOnly)
+            if (SniperOnly || AutoRun)
             {
-                charging = false; // the rifle is out of the hands: nothing else to throw
+                charging = false; // the rifle is out of the hands, or the shield is all there is: nothing else to throw
                 return;
             }
 
@@ -231,7 +239,7 @@ namespace StickDuel
         private void ThrowSwordOrPunch()
         {
             Sword sword = fighter.sword;
-            if (!fighter.ControlsEnabled || fighter.IsDead)
+            if (!fighter.ControlsEnabled || fighter.IsDead || AutoRun)
             {
                 return;
             }

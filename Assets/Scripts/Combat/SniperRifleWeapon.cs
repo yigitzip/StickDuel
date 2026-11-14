@@ -193,7 +193,7 @@ namespace StickDuel
             }
 
             var filter = new ContactFilter2D { useTriggers = true, useLayerMask = true };
-            filter.SetLayerMask(blockerMask | LayerMask.GetMask(Fighter.FighterLayer));
+            filter.SetLayerMask(blockerMask | LayerMask.GetMask(Fighter.FighterLayer, Fighter.SwordLayer)); // Sword: a held shield
             int count = Physics2D.Raycast(origin, direction, filter, hits, range);
 
             float best = float.PositiveInfinity;
@@ -221,9 +221,9 @@ namespace StickDuel
                         continue;
                     }
                 }
-                else if (hit.collider.isTrigger || (blockerMask.value & (1 << hit.collider.gameObject.layer)) == 0)
+                else if (!IsShield(hit.collider) && (hit.collider.isTrigger || (blockerMask.value & (1 << hit.collider.gameObject.layer)) == 0))
                 {
-                    continue; // trigger zones and stray Fighter-layer colliders don't block
+                    continue; // trigger zones, blades and stray Fighter-layer colliders don't block; a held shield does
                 }
 
                 best = hit.distance;
@@ -233,6 +233,13 @@ namespace StickDuel
 
             Vector2 end = bestCollider != null ? origin + direction * best : origin + direction * range;
             return new SniperShot(origin, direction, range, end, bestCollider, bestTarget);
+        }
+
+        /// <summary>The plate of someone's held shield: it stops a bullet like a wall does.</summary>
+        public static bool IsShield(Collider2D collider)
+        {
+            Rigidbody2D rb = collider != null && !collider.isTrigger ? collider.attachedRigidbody : null;
+            return rb != null && rb.TryGetComponent(out ShieldWeapon shield) && shield.IsHeld;
         }
 
         /// <summary>
@@ -266,6 +273,11 @@ namespace StickDuel
         /// <summary>The bullet arrived at <paramref name="shot"/>.End: deal the damage if the target is still there to take it.</summary>
         private void Impact(SniperShot shot)
         {
+            if (IsShield(shot.Collider) && Fx.Instance != null)
+            {
+                Fx.Instance.Clash(shot.End, bulletSpeed); // rang off the shield
+            }
+
             Fighter victim = shot.Target;
             if (victim == null || owner == null || victim.IsDead || victim.IsRolling || (victim.isGuard && owner.isGuard))
             {

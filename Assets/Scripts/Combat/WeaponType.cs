@@ -11,6 +11,8 @@ namespace StickDuel
         SniperRifle,
         LaserSword,
         CastleSword,
+        /// <summary>RUN! mode's gear only: not offered in the menu (see <see cref="WeaponTypeInfo.InMenu"/>).</summary>
+        Shield,
     }
 
     /// <summary>Menu data per <see cref="WeaponType"/>. Only playable types can be selected.</summary>
@@ -21,6 +23,9 @@ namespace StickDuel
         /// (see <see cref="WeaponBehaviourBase"/>) returns false here and shows as locked in the menu.
         /// </summary>
         public static bool IsPlayable(WeaponType type) => true;
+
+        /// <summary>The weapon row shows every type but the shield, which comes with RUN! alone.</summary>
+        public static bool InMenu(WeaponType type) => type != WeaponType.Shield;
 
         public static string DisplayName(WeaponType type)
         {

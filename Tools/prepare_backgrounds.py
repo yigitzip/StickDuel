@@ -222,6 +222,103 @@ def road_layer(padded):
     return img
 
 
+# RUN!: run_sky, run_hill, run_tower and run_hut share one 2752x1536 canvas, and run_guide.jpg (the same
+# canvas at 1600x893) marks it: red = the ground (RUN_GROUND), pink = where towers stand, blue = where a
+# hut stands, black = the hut's roof (Arenas/RunMode.cs read the rows below in canvas pixels; keep in sync).
+# Everything is stored at RUN_SCALE: on a 1080p screen that is about one texel a pixel.
+RUN_SCALE = 0.75
+RUN_SEAM = 240                       # columns cross-faded so each layer repeats without a seam
+RUN_GROUND_ROW = 1050                # the near grass strip starts here (feathered over RUN_FEATHER rows)
+RUN_FEATHER = 110
+RUN_HILL_FADE = (1070, 1150)         # the hill fades out over these rows, before its ragged bottom edge (1153-1190)
+RUN_TOWER_CROP = (1527, 23, 2026, 1168)
+RUN_HUT_CROP = (2033, 1013, 2740, 1456)
+RUN_HUT_BOTTOM = 1560                # the hut's art reaches down to this row, past the bottom of the view
+RUN_STONE_CROP = (1575, 1045, 1985, 1162)  # run_tower.png's stone base: the hut's parapet
+RUN_PARAPET_COLUMNS = (2110, 2663)   # it spans the hut between the posts' outer edges
+RUN_PARAPET_ROW = 1362               # its top: the sniper behind it shows from the chest up
+RUN_WINDOW = (2168, 1272, 2606, 1415)  # the hut's dark window (cut out: the sniper stands in it, between front and back)
+
+
+def seamless(img, n=RUN_SEAM):
+    """Cross-fades the last n columns into the first n: the result tiles edge to edge."""
+    a = np.asarray(img, dtype=np.float32)
+    w = a.shape[1]
+    out = a[:, : w - n].copy()
+    t = np.linspace(0.0, 1.0, n, dtype=np.float32)[None, :, None]
+    out[:, :n] = a[:, w - n:] * (1 - t) + a[:, :n] * t
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8), "RGBA")
+
+
+def twice(img):
+    out = Image.new("RGBA", (img.width * 2, img.height))
+    out.paste(img, (0, 0))
+    out.paste(img, (img.width, 0))
+    return out
+
+
+def small(img):
+    return img.resize((round(img.width * RUN_SCALE), round(img.height * RUN_SCALE)), Image.LANCZOS)
+
+
+def run():
+    sky = Image.open(os.path.join(REF, "run_sky.png")).convert("RGBA").crop((0, 0, 2564, 1536))  # clear right edge
+    sky = twice(seamless(sky))
+    hill = Image.open(os.path.join(REF, "run_hill.png")).convert("RGBA")
+    fade = np.asarray(hill).copy()
+    a0, a1 = RUN_HILL_FADE
+    fade[a0:a1, :, 3] = (fade[a0:a1, :, 3] * np.linspace(1.0, 0.0, a1 - a0)[:, None]).astype(np.uint8)
+    fade[a1:, :, 3] = 0
+    hill = twice(seamless(Image.fromarray(fade, "RGBA")))
+    ground = sky.crop((0, RUN_GROUND_ROW, sky.width, sky.height))
+    alpha = np.asarray(ground)[..., 3].astype(np.float32)
+    alpha[:RUN_FEATHER] *= (np.linspace(0.0, 1.0, RUN_FEATHER) ** 1.5)[:, None]  # eased: the hill shows through longer
+    ground.putalpha(Image.fromarray(alpha.astype(np.uint8)))
+    small(sky).save(os.path.join(OUT, "RunSky.png"))
+    small(hill).save(os.path.join(OUT, "RunHill.png"))
+    small(ground).save(os.path.join(OUT, "RunGround.png"))
+    small(Image.open(os.path.join(REF, "run_tower.png")).convert("RGBA").crop(RUN_TOWER_CROP)).save(os.path.join(OUT, "RunTower.png"))
+
+    # The hut is a roof on two posts with an open front. A fighter is taller than that opening, so the
+    # sniper stands low behind a stone parapet (the tower's own stone base) and only shows from the chest up.
+    hut = Image.open(os.path.join(REF, "run_hut.png")).convert("RGBA").crop(RUN_HUT_CROP)
+    tall = Image.new("RGBA", (hut.width, RUN_HUT_BOTTOM - RUN_HUT_CROP[1]))
+    tall.paste(hut, (0, 0))
+    x0, y0, x1, y1 = (v - o for v, o in zip(RUN_WINDOW, RUN_HUT_CROP[:2] * 2))
+    back = Image.new("RGBA", tall.size)
+    back.paste(tall.crop((x0, y0, x1, y1)), (x0, y0))
+    back.paste(tall.crop((x0, y1 - 20, x1, y1 - 10)).resize((x1 - x0, tall.height - y1 + 10)), (x0, y1 - 10))  # the dark interior carries on down
+    front = tall.copy()
+    ImageDraw.Draw(front).rectangle((x0, y0, x1 - 1, y1 - 1), fill=(0, 0, 0, 0))
+    stone = Image.open(os.path.join(REF, "run_tower.png")).convert("RGBA").crop(RUN_STONE_CROP)
+    px0, px1 = (v - RUN_HUT_CROP[0] for v in RUN_PARAPET_COLUMNS)
+    top = RUN_PARAPET_ROW - RUN_HUT_CROP[1]
+    front.alpha_composite(stone.resize((px1 - px0, tall.height - top), Image.LANCZOS), (px0, top))
+    small(front).save(os.path.join(OUT, "RunHut.png"))
+    small(back).save(os.path.join(OUT, "RunHutWindow.png"))
+
+
+def shield():
+    """Weapons/Shield.png: shield.jpg off its pale backdrop, turned so its long axis stands upright
+    (face to the right, strap to the left), 420 px tall (ShieldWeapon.cs reads it at that size)."""
+    rgb = np.asarray(Image.open(os.path.join(REF, "shield.jpg")).convert("RGB")).astype(np.int16)
+    pale = (rgb.min(axis=2) > 228) & (np.ptp(rgb, axis=2) < 14)
+    backdrop, _ = ndimage.label(pale)
+    edge = set(np.unique(np.concatenate([backdrop[0], backdrop[-1], backdrop[:, 0], backdrop[:, -1]]))) - {0}
+    keep = ~np.isin(backdrop, list(edge))
+    keep = ndimage.binary_opening(keep, iterations=2)
+    alpha = ndimage.gaussian_filter(keep.astype(np.float32), 1.0)
+    img = Image.fromarray(np.dstack([rgb.astype(np.uint8), (alpha * 255).astype(np.uint8)]), "RGBA")
+    ys, xs = np.nonzero(keep)
+    cov = np.cov(np.vstack([xs - xs.mean(), ys - ys.mean()]))
+    vx, vy = np.linalg.eigh(cov)[1][:, -1]           # long axis
+    tilt = np.degrees(np.arctan2(vx, vy))            # from straight down/up
+    img = img.rotate(-tilt if abs(tilt) < 90 else 180 - tilt, resample=Image.BICUBIC, expand=True)
+    box = img.getchannel("A").point(lambda a: 255 if a > 20 else 0).getbbox()
+    img = img.crop(box)
+    img.resize((round(img.width * 420 / img.height), 420), Image.LANCZOS).save(os.path.join(HERE, "..", "Assets", "Resources", "Weapons", "Shield.png"))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name in ("shrine", "isles", "volcano", "ice", "forest", "space", "neon", "deserted"):
@@ -240,4 +337,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if sys.argv[1:] == ["run"]:  # only the RUN! art and the shield
+        run()
+        shield()
+    else:
+        main()
+        run()
+        shield()

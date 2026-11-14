@@ -9,7 +9,7 @@ namespace StickDuel.EditorTools
     /// Lets an external tool drive the open editor for quick checks: write one command to
     /// Temp/bridge_in.txt, the result is appended to Temp/bridge_out.txt.
     /// Commands: refresh | reimport &lt;folder&gt; | play | stop | shot &lt;png path&gt; | start &lt;weapon&gt; &lt;map&gt; | autoplayer | slow &lt;scale&gt;
-    /// | survival | endless | castleshot &lt;png&gt; [ppu] | camshot &lt;png&gt; | restart | freeze | laser [x] | missile [lane] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
+    /// | survival | endless | run | castleshot &lt;png&gt; [ppu] | camshot &lt;png&gt; | restart | freeze | laser [x] | missile [lane] | jump | climb &lt;-1|0|1&gt; | hang | kill enemy|player|guards | tp &lt;x&gt; &lt;y&gt; | walk &lt;dir&gt; | state | reload | menu | icicle | find &lt;name&gt; | stopmove | jumptest &lt;x&gt; [run dir] (put the player at x, mash jump while the first jump is still rising, then `jumps` reports how many fired: 1 = no mid-air re-jump)
     /// </summary>
     [InitializeOnLoad]
     public static class TestBridge
@@ -145,6 +145,10 @@ namespace StickDuel.EditorTools
                     if (Arenas.Instance == null) return "no Arenas";
                     Arenas.Instance.StartEndless();
                     return "ok";
+                case "run":
+                    if (Arenas.Instance == null) return "no Arenas";
+                    Arenas.Instance.StartRunMode();
+                    return "ok";
                 case "restart":
                     // Same as R in game.
                     var run = UnityEngine.Object.FindAnyObjectByType<StormTheCastleMode>();
@@ -278,6 +282,8 @@ namespace StickDuel.EditorTools
                     string survivalState = sm.Length == 0 ? "" : $" survival x{sm.Length} cleared {sm[0].Cleared} active {sm[0].Active} guards {sm[0].Guards} kills {sm[0].Kills} over {sm[0].IsOver} won {sm[0].Won} player {d.Player.Body.position} hp {d.Player.Health:0}";
                     var es = UnityEngine.Object.FindAnyObjectByType<EndlessSurvivalMode>();
                     if (es != null) survivalState += $" endless wave {es.Wave} alive {es.Alive} kills {es.Kills} survived {es.Survived:0} over {es.IsOver}";
+                    var rm = UnityEngine.Object.FindAnyObjectByType<RunMode>();
+                    if (rm != null) survivalState += $" run {rm.Distance:0}m {rm.Seconds:0}s posts {rm.Posts} over {rm.IsOver}";
                     return d == null ? "no duel" : survivalState + $" round {d.Round} score {d.PlayerScore}-{d.EnemyScore} hp {d.Player.Health:0}/{d.Enemy.Health:0} pos {d.Player.Body.position} {d.Enemy.Body.position}";
                 default:
                     return "unknown";

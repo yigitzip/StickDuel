@@ -325,6 +325,9 @@ namespace StickDuel
             enemyName.text = label;
         }
 
+        /// <summary>A mode with its own controls (RUN!) swaps the controls hint at the bottom of the screen.</summary>
+        public void SetHint(string text) => hintText.text = text;
+
         /// <summary>For modes without shuriken (Sniper Mode): the HUD's shuriken slots go.</summary>
         public void HideShurikenIcons()
         {

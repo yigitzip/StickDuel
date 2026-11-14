@@ -74,6 +74,8 @@ namespace StickDuel
         /// <summary>The arrow's launch velocity for the current draw.</summary>
         public Vector2 ArrowVelocity => (Vector2)transform.right * Mathf.Lerp(arrowSpeed.x, arrowSpeed.y, draw);
         public float ArrowGravity => arrowGravity;
+        /// <summary>How fast a fully drawn arrow leaves the bow (bots aim their lob with it).</summary>
+        public float FullDrawSpeed => arrowSpeed.y;
         protected override float ThrowGravity => throwGravity;
         protected override float ThrowDamage => throwDamage;
         protected override bool TrailOn => false;
