@@ -165,9 +165,9 @@ namespace StickDuel
                 // Measured off Tools/reference/space_guide.png: three lower decks over a drop, five
                 // one-way walkways above, a truss ladder up the left edge. Fighters start a deck apart.
                 Name = "ORBITAL DOCK", Blurb = "Decks over the drop, a ladder up the left", Texture = "Bg_space", GroundRow = 558f,
-                Floors = new[] { new Vector3(69f, 430f, 558f), new Vector3(1192f, 1541f, 558f), new Vector3(550f, 1058f, 583f) },
+                Floors = new[] { new Vector3(45f, 430f, 558f), new Vector3(1192f, 1555f, 558f), new Vector3(550f, 1058f, 583f) },
                 Ledges = new[] { new Vector3(43f, 217f, 289f), new Vector3(281f, 485f, 250f), new Vector3(559f, 1072f, 218f), new Vector3(1165f, 1364f, 241f), new Vector3(1430f, 1599f, 288f) },
-                Climbs = new[] { new Vector3(64f, 275f, 572f) },
+                Climbs = new[] { new Vector3(64f, 275f, 650f) },
                 Spawns = new Vector2(330f, 1300f),
                 WorldScale = 2f,
                 CropToPainting = true,
