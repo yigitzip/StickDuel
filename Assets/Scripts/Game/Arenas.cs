@@ -106,6 +106,10 @@ namespace StickDuel
             public float BackgroundScale = 1f;
             /// <summary>Fought on the train (see BuildTrain): Texture is only the menu picture, Spawns are train_guide.png columns.</summary>
             public bool Train;
+            /// <summary>Uniform world scale for this arena's painted geometry and colliders.</summary>
+            public float WorldScale = 1f;
+            /// <summary>Exclude the mirrored side padding from the playable background.</summary>
+            public bool CropToPainting;
         }
 
         /// <summary>How far the endless battlefield's floor reaches either way (hours of walking).</summary>
@@ -164,7 +168,9 @@ namespace StickDuel
                 Floors = new[] { new Vector3(69f, 430f, 558f), new Vector3(1192f, 1541f, 558f), new Vector3(550f, 1058f, 583f) },
                 Ledges = new[] { new Vector3(43f, 217f, 289f), new Vector3(281f, 485f, 250f), new Vector3(559f, 1072f, 218f), new Vector3(1165f, 1364f, 241f), new Vector3(1430f, 1599f, 288f) },
                 Climbs = new[] { new Vector3(64f, 275f, 572f) },
-                Spawns = new Vector2(380f, 1240f),
+                Spawns = new Vector2(330f, 1300f),
+                WorldScale = 2f,
+                CropToPainting = true,
                 Motes = new Color(0.8f, 0.9f, 1f, 0.7f), MotesVelocity = new Vector2(-0.08f, 0.06f), MotesRow = 400f, MotesRate = 8f, MotesLifetime = 10f,
             },
             new Arena
@@ -378,7 +384,7 @@ namespace StickDuel
                 }
                 else if (arena.Spawns != Vector2.zero)
                 {
-                    duel.SetSpawns(World(arena.Spawns.x, 0f, arena).x, World(arena.Spawns.y, 0f, arena).x);
+                    duel.SetSpawns(World(arena.Spawns.x, 0f, arena).x * arena.WorldScale, World(arena.Spawns.y, 0f, arena).x * arena.WorldScale);
                 }
             }
 
@@ -389,7 +395,7 @@ namespace StickDuel
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 if (arena != null && arena.Train) ai.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x);
-                else ai.ArenaHalfWidth = HalfWidth;
+                else ai.ArenaHalfWidth = HalfWidth * (arena != null ? arena.WorldScale : 1f);
             }
 
             if (castleRun && duel.GetComponent<StormTheCastleMode>() == null)
@@ -473,18 +479,29 @@ namespace StickDuel
             }
 
             var texture = Resources.Load<Texture2D>("Arena/" + arena.Texture);
+            root.localScale = Vector3.one * arena.WorldScale;
             var background = new GameObject("Background").AddComponent<SpriteRenderer>();
             background.transform.SetParent(root, false);
-            float groundFromBottom = texture.height - PadTop - arena.GroundRow;
-            background.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
-                new Vector2(0.5f, groundFromBottom / texture.height), PixelsPerUnit);
+            if (arena.CropToPainting)
+            {
+                float cropHeight = texture.height - PadTop - PadBottom;
+                float groundFromBottom = cropHeight - arena.GroundRow;
+                background.sprite = Sprite.Create(texture, new Rect(PadSide, PadBottom, PaintingWidth, cropHeight),
+                    new Vector2(0.5f, groundFromBottom / cropHeight), PixelsPerUnit);
+            }
+            else
+            {
+                float groundFromBottom = texture.height - PadTop - arena.GroundRow;
+                background.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0.5f, groundFromBottom / texture.height), PixelsPerUnit);
+            }
             background.sortingOrder = -100;
 
             if (cam != null)
             {
                 HideSceneSky();
-                // Never show past the painting's padding, sideways or by zooming out.
-                float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit;
+                // Never show past the painting edge, or the mirrored padding for uncropped arenas.
+                float halfView = (HalfWidth + (arena.CropToPainting ? 0f : PadSide * 0.5f / PixelsPerUnit)) * arena.WorldScale;
                 cam.GetComponent<CameraRig>().SetBounds(halfView, halfView / Mathf.Max(cam.aspect, 0.5f));
             }
 
@@ -507,7 +524,7 @@ namespace StickDuel
                 var go = new GameObject("Vine") { layer = 2 }; // Ignore Raycast: aim lines and AI ground checks see through it
                 go.transform.SetParent(root, false);
                 Vector2 top = World(climb.x, climb.y, arena), bottom = World(climb.x, climb.z, arena);
-                go.transform.position = (top + bottom) * 0.5f;
+                go.transform.localPosition = (top + bottom) * 0.5f;
                 var box = go.AddComponent<BoxCollider2D>();
                 box.isTrigger = true;
                 box.size = new Vector2(ClimbWidth, top.y - bottom.y);
@@ -524,7 +541,7 @@ namespace StickDuel
             {
                 var wall = new GameObject("Wall");
                 wall.transform.SetParent(root, false);
-                wall.transform.position = new Vector2(side * (HalfWidth + 0.5f), 5f);
+                wall.transform.localPosition = new Vector2(side * (HalfWidth + 0.5f), 5f);
                 wall.AddComponent<BoxCollider2D>().size = new Vector2(1f, 30f);
             }
 
@@ -692,7 +709,7 @@ namespace StickDuel
                 var texture = Resources.Load<Texture2D>("Arena/BasaltPiece" + (i % 2));
                 var go = new GameObject("Piece");
                 go.transform.SetParent(root, false);
-                go.transform.position = World(arena.Pieces[i], arena.GroundRow, arena);
+                go.transform.localPosition = World(arena.Pieces[i], arena.GroundRow, arena);
                 var sprite = go.AddComponent<SpriteRenderer>();
                 float surfaceFromTop = arena.GroundRow - PieceTopRow;
                 sprite.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
@@ -711,7 +728,7 @@ namespace StickDuel
             var lava = new GameObject("LavaSea") { layer = 2 }; // Ignore Raycast: aim lines and AI ground checks see through it
             lava.transform.SetParent(root, false);
             Vector2 surface = World(PaintingWidth * 0.5f, LavaRow, arena);
-            lava.transform.position = surface;
+            lava.transform.localPosition = surface;
             var lavaSprite = lava.AddComponent<SpriteRenderer>();
             lavaSprite.sprite = Sprite.Create(lavaTexture, new Rect(0f, 0f, lavaTexture.width, lavaTexture.height), new Vector2(0.5f, 1f), PixelsPerUnit);
             lavaSprite.sortingOrder = 31;
@@ -785,7 +802,7 @@ namespace StickDuel
                 // A dark shadow reads on the bright snow, where an additive glow would vanish.
                 var shadow = new GameObject("IcicleShadow").AddComponent<SpriteRenderer>();
                 shadow.transform.SetParent(root, false);
-                shadow.transform.position = new Vector2(x, 0.02f);
+                shadow.transform.localPosition = new Vector2(x, 0.02f);
                 shadow.transform.localScale = new Vector3(1.6f, 0.35f, 1f);
                 shadow.sprite = shadowSprite;
                 shadow.color = new Color(0.02f, 0.06f, 0.2f, 0.9f);
@@ -799,7 +816,7 @@ namespace StickDuel
         {
             var go = new GameObject(name);
             go.transform.SetParent(root, false);
-            go.transform.position = new Vector2((topLeft.x + right) * 0.5f, topLeft.y);
+            go.transform.localPosition = new Vector2((topLeft.x + right) * 0.5f, topLeft.y);
             var box = go.AddComponent<BoxCollider2D>();
             box.size = new Vector2(right - topLeft.x, depth);
             box.offset = new Vector2(0f, -depth * 0.5f);
@@ -811,7 +828,7 @@ namespace StickDuel
         {
             var go = new GameObject("Glow");
             go.transform.SetParent(root, false);
-            go.transform.position = position;
+            go.transform.localPosition = position;
             go.transform.localScale = scale;
             var sprite = go.AddComponent<SpriteRenderer>();
             if (glowMaterial != null && glowMaterial.mainTexture is Texture2D texture)
@@ -829,7 +846,7 @@ namespace StickDuel
         {
             var go = new GameObject("Motes");
             go.transform.SetParent(root, false);
-            go.transform.position = position;
+            go.transform.localPosition = position;
             var system = go.AddComponent<ParticleSystem>();
             system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             ParticleSystem.MainModule main = system.main;
