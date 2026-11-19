@@ -31,16 +31,18 @@ namespace StickDuel
 
         // Train arena (Tools/prepare_backgrounds.py train()). Its numbers are pixels of the 10100x8007
         // Tools/reference/train_guide.png canvas, which Arena/Train and Arena/TrainGuide are cut from.
-        private const float TrainPixelsPerUnit = 140f;                  // the sheet shrunk so a boxcar stands about one and a half fighters tall
+        private const float TrainPixelsPerUnit = 124f;                  // the sheet shrunk so a boxcar stands about 1.7 fighters tall
         private const float TrainCropLeft = 770f, TrainCropTop = 470f;  // TRAIN_CROP's corner
         private const float TrainTextureScale = 100f / 140f;            // TRAIN_SCALE: the textures are stored smaller than the sheet, to fit 4096 px
         private const float TrainCentre = 3492f, TrainRoof = 629f;      // world x = 0 and y = 0: the train's middle, the boxcar roofs
         private const float TrainLeft = 800f, TrainRight = 6150f;       // the cowcatcher and the flatcar's end: the camera and the bot stay between
         private const float TrainWheels = 1024f;                        // the wheels' lowest row
         private const float TrainDeckBottom = 940f;                     // the stand-on boxes reach down to here, under the decks
-        // The two scrolling layers (2752x1536 paintings at full size): wheels on BackdropWheelRow, and the camera never
-        // goes lower than BackdropFloor above their ragged bottom edge or higher than the far layer's top.
-        private const float BackdropPixelsPerUnit = 100f, BackdropHeight = 1536f, BackdropWheelRow = 1450f, BackdropFloor = 40f;
+        // The two scrolling layers (2752x1536 paintings at full size), wheels on BackdropWheelRow. BackdropScale
+        // shrinks both uniformly (width and height alike) without touching their textures.
+        private const float BackdropScale = 0.75f;
+        private const float BackdropPixelsPerUnit = 100f / BackdropScale, BackdropHeight = 1536f, BackdropWheelRow = 1450f;
+        private const float TrainViewSize = 5f;                         // the camera's fixed half height on the train
         private const float FarSpeed = 0.8f, NearSpeed = 7f;            // how fast the layers slide right (units a second)
         private const float FarFollow = 0.9f, NearFollow = 0.6f;        // how much they follow the camera sideways (parallax)
 
@@ -106,10 +108,26 @@ namespace StickDuel
             public float BackgroundScale = 1f;
             /// <summary>Fought on the train (see BuildTrain): Texture is only the menu picture, Spawns are train_guide.png columns.</summary>
             public bool Train;
-            /// <summary>Uniform world scale for this arena's painted geometry and colliders.</summary>
+            /// <summary>
+            /// How much bigger than usual the painting is drawn (fighters keep their size). Everything built from
+            /// its pixels scales with it: the background, colliders, vines, spawns, walls, camera bounds and missile lanes.
+            /// </summary>
+            public float Scale = 1f;
+            /// <summary>Lowest the camera centre goes, in world units (NaN: the camera's own default).</summary>
+            public float CameraMinY = float.NaN;
+            /// <summary>Pixels of this painting per world unit.</summary>
+            public float PixelsPerUnit => Arenas.PixelsPerUnit / Scale;
+            /// <summary>Half the painting's width in world units (where its walls stand).</summary>
+            public float HalfWidth => Arenas.HalfWidth * Scale;
+            /// <summary>Scales the whole built arena (root transform), fighters keep their size. An alternative to <see cref="Scale"/>: use one or the other.</summary>
             public float WorldScale = 1f;
             /// <summary>Exclude the mirrored side padding from the playable background.</summary>
             public bool CropToPainting;
+            /// <summary>
+            /// Cut only the mirrored side padding (the painting's own left and right edges end the arena),
+            /// keeping the sky and ground padding above and below for the camera. Implied by <see cref="CropToPainting"/>.
+            /// </summary>
+            public bool CropSides;
         }
 
         /// <summary>How far the endless battlefield's floor reaches either way (hours of walking).</summary>
@@ -154,6 +172,9 @@ namespace StickDuel
                 // Measured off Tools/reference/forest_guide.png. The side logs reach 32 px past their painted
                 // ends so the ivy's full swing lands squarely on them; their vines hang under them.
                 Name = "MISTY FOREST", Blurb = "Climb the vines, swing the ivy", Texture = "Bg_forest", GroundRow = 736f,
+                Scale = 1.275f,   // about a quarter bigger: the vines, ledges and ivy grow with it (see SwingingIvy.Create)
+                CropSides = true, // the trees' mirrored copies past either edge read as an endless forest
+                Spawns = new Vector2(600f, 1000f), // both on the log
                 Floors = new[] { new Vector3(409f, 1217f, 736f) },
                 Ledges = new[] { new Vector3(19f, 334f, 484f), new Vector3(1277f, 1598f, 480f) },
                 Climbs = new[] { new Vector3(208f, 470f, 881f), new Vector3(1404f, 466f, 879f) },
@@ -177,6 +198,7 @@ namespace StickDuel
             {
                 // Measured off Tools/reference/neon_guide.png: one flat deck across the whole painting.
                 Name = "NEON DISTRICT", Blurb = "A laser rakes the deck", Texture = "Bg_neon", GroundRow = 580f,
+                Scale = 1.25f, // a quarter bigger than the other flat arenas: more room to dodge the laser
                 Floors = new[] { new Vector3(0f, 1600f, 580f) },
                 Laser = true,
                 Motes = new Color(1f, 0.5f, 0.9f, 0.8f), MotesVelocity = new Vector2(0.05f, 0.2f), MotesRow = 450f, MotesRate = 10f, MotesLifetime = 7f,
@@ -184,16 +206,18 @@ namespace StickDuel
             new Arena
             {
                 // Measured off Tools/reference/deserted_guide.png: stepped ground over the wrecks either
-                // side, a scaffold in the middle (solid lower deck, one-way upper deck, a ladder between),
+                // side, a scaffold in the middle (two one-way decks, a ladder between, room to walk under),
                 // and missiles coming in at three heights from either edge. Fighters start on the wrecks' roofs.
                 Name = "DESERTED", Blurb = "Missiles rake the base", Texture = "Bg_deserted", GroundRow = 575f,
+                Scale = 1.8f, // the wrecks and the scaffold were too small next to the fighters
+                CameraMinY = 0.8f, // low enough to keep a fighter under the scaffold in view, still above the painting's bottom at full zoom out
                 Floors = new[]
                 {
                     new Vector3(0f, 126f, 642f), new Vector3(114f, 344f, 570f), new Vector3(328f, 401f, 586f), new Vector3(374f, 535f, 632f),
-                    new Vector3(535f, 958f, 543f),
+                    new Vector3(535f, 958f, 700f), // the sand under the scaffold: its lower deck stands a fighter's height above it
                     new Vector3(958f, 1134f, 609f), new Vector3(1134f, 1256f, 577f), new Vector3(1256f, 1377f, 615f), new Vector3(1372f, 1460f, 653f), new Vector3(1456f, 1600f, 691f),
                 },
-                Ledges = new[] { new Vector3(697f, 944f, 378f) },
+                Ledges = new[] { new Vector3(535f, 958f, 543f), new Vector3(697f, 944f, 378f) },
                 Climbs = new[] { new Vector3(819f, 364f, 543f) },
                 Spawns = new Vector2(229f, 1195f),
                 Missiles = new[] { new Vector2(19f, 338f), new Vector2(19f, 521f), new Vector2(19f, 618f), new Vector2(1578f, 331f), new Vector2(1578f, 499f), new Vector2(1578f, 643f) },
@@ -395,7 +419,7 @@ namespace StickDuel
             foreach (AIDriver ai in FindObjectsByType<AIDriver>(FindObjectsSortMode.None))
             {
                 if (arena != null && arena.Train) ai.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x);
-                else ai.ArenaHalfWidth = HalfWidth * (arena != null ? arena.WorldScale : 1f);
+                else ai.ArenaHalfWidth = arena != null ? arena.HalfWidth * arena.WorldScale : HalfWidth;
             }
 
             if (castleRun && duel.GetComponent<StormTheCastleMode>() == null)
@@ -460,7 +484,8 @@ namespace StickDuel
 
         // ================================================================ arenas
 
-        private static Vector2 World(float px, float py, Arena arena) => new Vector2((px - PaintingWidth * 0.5f) / PixelsPerUnit, (arena.GroundRow - py) / PixelsPerUnit);
+        /// <summary>Painting pixel to world point (ground row at y = 0, painting middle at x = 0), at the arena's <see cref="Arena.Scale"/>.</summary>
+        private static Vector2 World(float px, float py, Arena arena) => new Vector2((px - PaintingWidth * 0.5f) / arena.PixelsPerUnit, (arena.GroundRow - py) / arena.PixelsPerUnit);
 
         private void Build(Arena arena)
         {
@@ -482,27 +507,24 @@ namespace StickDuel
             root.localScale = Vector3.one * arena.WorldScale;
             var background = new GameObject("Background").AddComponent<SpriteRenderer>();
             background.transform.SetParent(root, false);
-            if (arena.CropToPainting)
-            {
-                float cropHeight = texture.height - PadTop - PadBottom;
-                float groundFromBottom = cropHeight - arena.GroundRow;
-                background.sprite = Sprite.Create(texture, new Rect(PadSide, PadBottom, PaintingWidth, cropHeight),
-                    new Vector2(0.5f, groundFromBottom / cropHeight), PixelsPerUnit);
-            }
-            else
-            {
-                float groundFromBottom = texture.height - PadTop - arena.GroundRow;
-                background.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
-                    new Vector2(0.5f, groundFromBottom / texture.height), PixelsPerUnit);
-            }
+            // Cropping keeps the painting where it was: the pivot stays on the ground row, so floors and spawns line up as before.
+            bool cropSides = arena.CropToPainting || arena.CropSides;
+            float cropLeft = cropSides ? PadSide : 0f, cropBottom = arena.CropToPainting ? PadBottom : 0f;
+            float cropHeight = texture.height - cropBottom - (arena.CropToPainting ? PadTop : 0f);
+            float groundFromBottom = texture.height - PadTop - arena.GroundRow - cropBottom;
+            background.sprite = Sprite.Create(texture, new Rect(cropLeft, cropBottom, texture.width - cropLeft * 2f, cropHeight),
+                new Vector2(0.5f, groundFromBottom / cropHeight), arena.PixelsPerUnit);
             background.sortingOrder = -100;
+            float halfWidth = arena.HalfWidth;
 
             if (cam != null)
             {
                 HideSceneSky();
                 // Never show past the painting edge, or the mirrored padding for uncropped arenas.
-                float halfView = (HalfWidth + (arena.CropToPainting ? 0f : PadSide * 0.5f / PixelsPerUnit)) * arena.WorldScale;
-                cam.GetComponent<CameraRig>().SetBounds(halfView, halfView / Mathf.Max(cam.aspect, 0.5f));
+                float halfView = (halfWidth + (cropSides ? 0f : PadSide * 0.5f / arena.PixelsPerUnit)) * arena.WorldScale;
+                var rig = cam.GetComponent<CameraRig>();
+                rig.SetBounds(halfView, halfView / Mathf.Max(cam.aspect, 0.5f));
+                if (!float.IsNaN(arena.CameraMinY)) rig.MinY = arena.CameraMinY;
             }
 
             foreach (Vector3 floor in arena.Floors)
@@ -533,7 +555,7 @@ namespace StickDuel
 
             if (arena.Ivy != Vector2.zero)
             {
-                SwingingIvy.Create(root, World(arena.Ivy.x, arena.Ivy.y, arena), FullResPixelsPerUnit);
+                SwingingIvy.Create(root, World(arena.Ivy.x, arena.Ivy.y, arena), FullResPixelsPerUnit / arena.Scale);
             }
 
             // Invisible walls at the painting's edges.
@@ -541,7 +563,7 @@ namespace StickDuel
             {
                 var wall = new GameObject("Wall");
                 wall.transform.SetParent(root, false);
-                wall.transform.localPosition = new Vector2(side * (HalfWidth + 0.5f), 5f);
+                wall.transform.localPosition = new Vector2(side * (halfWidth + 0.5f), 5f);
                 wall.AddComponent<BoxCollider2D>().size = new Vector2(1f, 30f);
             }
 
@@ -550,7 +572,7 @@ namespace StickDuel
                 CreateGlow(root, World(glow.x, glow.y, arena), Vector3.one * arena.GlowSize, arena.GlowColor, -90).gameObject.AddComponent<Flicker>();
             }
 
-            Particles(root, World(PaintingWidth * 0.5f, arena.MotesRow, arena), arena);
+            Particles(root, World(PaintingWidth * 0.5f, arena.MotesRow, arena), arena, halfWidth);
             if (arena.Icicles)
             {
                 StartCoroutine(IcicleRain(root));
@@ -563,7 +585,7 @@ namespace StickDuel
 
             if (arena.Laser)
             {
-                FallingLaser.Create(root, -HalfWidth, HalfWidth, () => RoundLive);
+                FallingLaser.Create(root, -halfWidth, halfWidth, () => RoundLive);
             }
 
             if (arena.Missiles.Length > 0)
@@ -574,7 +596,8 @@ namespace StickDuel
                     lanes[i] = World(arena.Missiles[i].x, arena.Missiles[i].y, arena);
                 }
 
-                MissileHazard.Create(root, lanes, HalfWidth, FullResPixelsPerUnit, () => RoundLive);
+                // The missile keeps its size next to the fighters (and so its hit box): only its lanes follow the scale.
+                MissileHazard.Create(root, lanes, halfWidth, FullResPixelsPerUnit, () => RoundLive);
             }
         }
 
@@ -605,15 +628,13 @@ namespace StickDuel
         /// The train arena: the train stands still at the middle of the world while two painted layers
         /// slide right behind it (see <see cref="Treadmill"/>), the far one slowly, the near one fast. The
         /// colliders follow the red lines of train_guide.png, which is laid exactly over the train and then
-        /// switched off. The camera follows the fighters along the train but never shows past the layers'
-        /// top or bottom edge.
+        /// switched off. The camera keeps one zoom and one height and only follows the fighters sideways.
         /// </summary>
         private void BuildTrain(Transform root, Arena arena)
         {
             HideSceneSky();
             float bottom = TrainWorld(0f, TrainWheels).y - (BackdropHeight - BackdropWheelRow) / BackdropPixelsPerUnit; // both layers' bottom edge
-            Sprite far = Backdrop("TrainFar");
-            Treadmill.Create(root, "FarLayer", far, -20, FarSpeed, FarFollow, bottom);
+            Treadmill.Create(root, "FarLayer", Backdrop("TrainFar"), -20, FarSpeed, FarFollow, bottom);
             Treadmill.Create(root, "NearLayer", Backdrop("TrainNear"), -10, NearSpeed, NearFollow, bottom);
             TrainSprite(root, "Train", "Train", 0);
             GameObject guide = TrainSprite(root, "CollisionGuide", "TrainGuide", 1);
@@ -634,12 +655,12 @@ namespace StickDuel
             Particles(root, new Vector2(-8f, 2f), arena); // dust blowing back along the train
             if (cam != null)
             {
-                float halfView = HalfWidth + PadSide * 0.5f / PixelsPerUnit; // same zoom limit as the arenas
-                float maxSize = halfView / Mathf.Max(cam.aspect, 0.5f);
+                // A steady view: one zoom and one height for the whole fight, only sliding sideways with the
+                // fighters. Its bottom edge is the wheels' lowest row, so little shows under the train.
                 var rig = cam.GetComponent<CameraRig>();
-                rig.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x, maxSize);
-                rig.MinY = bottom + BackdropFloor / BackdropPixelsPerUnit + maxSize;
-                rig.MaxY = bottom + far.bounds.size.y - maxSize;
+                rig.MinSize = TrainViewSize;
+                rig.SetBounds(TrainWorld(TrainLeft, 0f).x, TrainWorld(TrainRight, 0f).x, TrainViewSize);
+                rig.MinY = rig.MaxY = TrainWorld(0f, TrainWheels).y + TrainViewSize;
             }
         }
 
@@ -842,7 +863,7 @@ namespace StickDuel
             return sprite;
         }
 
-        private static void Particles(Transform root, Vector2 position, Arena arena)
+        private static void Particles(Transform root, Vector2 position, Arena arena, float halfWidth = HalfWidth)
         {
             var go = new GameObject("Motes");
             go.transform.SetParent(root, false);
@@ -861,7 +882,7 @@ namespace StickDuel
             emission.rateOverTime = arena.MotesRate;
             ParticleSystem.ShapeModule shape = system.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(HalfWidth * 2.4f, 0.5f, 0.1f);
+            shape.scale = new Vector3(halfWidth * 2.4f, 0.5f, 0.1f);
             ParticleSystem.VelocityOverLifetimeModule drift = system.velocityOverLifetime;
             drift.enabled = true;
             Vector2 v = arena.MotesVelocity;

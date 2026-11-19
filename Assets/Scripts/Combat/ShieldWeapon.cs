@@ -26,7 +26,7 @@ namespace StickDuel
 
         private static Sprite art;
 
-        private Vector2 centre, centreVelocity;
+        private Vector2 offset, offsetVelocity; // the shield's middle from the owner's hip: smoothed in the body's frame, so running never drags it behind
         private float angle, angleVelocity;
 
         public override WeaponType Type => WeaponType.Shield;
@@ -69,8 +69,9 @@ namespace StickDuel
             angle = owner.Facing > 0 ? 0f : 180f;
             angleVelocity = 0f;
             SetMirrored(owner.Facing < 0); // strap stays at the back, rim the right way up
-            centre = CentreTarget();
-            centreVelocity = Vector2.zero;
+            offset = CentreTarget() - owner.Body.position;
+            offsetVelocity = Vector2.zero;
+            Vector2 centre = owner.Body.position + offset;
             body.position = centre;
             body.rotation = angle;
             transform.SetPositionAndRotation(centre, Quaternion.Euler(0f, 0f, angle));
@@ -97,8 +98,8 @@ namespace StickDuel
             }
 
             angle = Mathf.SmoothDampAngle(angle, target, ref angleVelocity, turnSmoothTime, Mathf.Infinity, dt);
-            centre = Vector2.SmoothDamp(centre, CentreTarget(), ref centreVelocity, handSmoothTime, Mathf.Infinity, dt);
-            body.MovePosition(centre);
+            offset = Vector2.SmoothDamp(offset, CentreTarget() - owner.Body.position, ref offsetVelocity, handSmoothTime, Mathf.Infinity, dt);
+            body.MovePosition(owner.Body.position + owner.Body.linearVelocity * dt + offset); // where the owner is after this step
             body.MoveRotation(angle);
         }
 

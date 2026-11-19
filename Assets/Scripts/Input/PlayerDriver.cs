@@ -47,7 +47,7 @@ namespace StickDuel
         /// <summary>Sniper Mode: the rifle is the only weapon. No shuriken, no punch (right click still throws the rifle).</summary>
         public bool SniperOnly { get; set; }
 
-        /// <summary>RUN!: always running right, the shield the only gear (no shuriken, punch or throw; A / D do nothing).</summary>
+        /// <summary>RUN!: the shield the only gear (no shuriken, punch or throw); A / D steer as usual.</summary>
         public bool AutoRun { get; set; }
 
         public int ShurikenCount => shurikenCount;
@@ -132,11 +132,6 @@ namespace StickDuel
                 {
                     usingGamepadAim = false;
                 }
-            }
-
-            if (AutoRun)
-            {
-                move = 1f;
             }
 
             UpdateThrow(mouse);

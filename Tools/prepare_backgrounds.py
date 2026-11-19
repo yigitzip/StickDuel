@@ -228,8 +228,9 @@ def road_layer(padded):
 # Everything is stored at RUN_SCALE: on a 1080p screen that is about one texel a pixel.
 RUN_SCALE = 0.75
 RUN_SEAM = 240                       # columns cross-faded so each layer repeats without a seam
-RUN_GROUND_ROW = 1050                # the near grass strip starts here (feathered over RUN_FEATHER rows)
-RUN_FEATHER = 110
+RUN_GROUND = 1262                    # the red line (RunMode.cs GroundRow): the fighters' feet
+RUN_FEATHER = 30
+RUN_GROUND_ROW = RUN_GROUND - RUN_FEATHER  # the near grass strip fades in over RUN_FEATHER rows, solid from the red line down
 RUN_HILL_FADE = (1070, 1150)         # the hill fades out over these rows, before its ragged bottom edge (1153-1190)
 RUN_TOWER_CROP = (1527, 23, 2026, 1168)
 RUN_HUT_CROP = (2033, 1013, 2740, 1456)

@@ -15,8 +15,10 @@ namespace StickDuel
     [RequireComponent(typeof(Fighter))]
     public sealed class RunGunner : MonoBehaviour
     {
-        [Tooltip("Seconds between shots, rolled between the two.")]
+        [Tooltip("Rifle: seconds between shots, rolled between the two.")]
         [SerializeField] private Vector2 interval = new Vector2(2.2f, 3.6f);
+        [Tooltip("Bow: seconds from a loose to the next draw (the draw itself adds 0.8 s), rolled between the two.")]
+        [SerializeField] private Vector2 archerInterval = new Vector2(1.2f, 2f);
         [Tooltip("The aim lands up to this far (world units) off the target, re-rolled every shot.")]
         [SerializeField, Min(0f)] private float aimError = 0.5f;
         [Tooltip("Rifle: seconds the runner must be in view before the first shot (the laser is the warning).")]
@@ -105,7 +107,8 @@ namespace StickDuel
 
         private void Reload()
         {
-            nextShot = Time.time + Random.Range(interval.x, interval.y);
+            Vector2 wait = self.heldWeapon is BowWeapon ? archerInterval : interval;
+            nextShot = Time.time + Random.Range(wait.x, wait.y);
             aimOffset = Random.insideUnitCircle * aimError;
         }
 

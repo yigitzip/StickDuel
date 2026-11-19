@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 namespace StickDuel
 {
     /// <summary>
-    /// RUN!: the player runs right forever with nothing but a <see cref="ShieldWeapon"/>, past archer
+    /// RUN!: the player runs right (A / D steer, the world and its layers scroll with them) with nothing but a <see cref="ShieldWeapon"/>, past archer
     /// towers and sniper huts whose bots (<see cref="RunGunner"/>) shoot at them. Jump, roll (invulnerable)
     /// or turn the shield to the shots; the first death ends the run with the distance and the time,
     /// R runs again from where they fell.
@@ -16,6 +16,8 @@ namespace StickDuel
     /// the red line is the ground (world y = 0), the canvas repeats every <see cref="ChunkWidth"/> units,
     /// and in every repeat towers may stand on the two pink stretches and a hut on the blue one. The
     /// hut's roof (the guide's black lines) is solid: it can be run over and stops arrows and bullets.
+    /// The hill strip is the floor the player runs on: its dirt path is set down onto the red line, it is fixed
+    /// in the world and drawn over the near grass; the towers stand on that line too, only the sky drifts behind.
     /// Depth: sky, hill, near grass and towers behind the fighters, the hut in front of them; every bot
     /// stands among the fighters (the sniper between the hut's back wall and its front) and shoots on
     /// the player's plane. The painted layers scroll by parallax (<see cref="Treadmill"/>); the ground,
@@ -31,6 +33,7 @@ namespace StickDuel
         private const float StoredScale = 0.75f;                      // RUN_SCALE: the sprites are stored this much smaller
         private const float CanvasWidth = 2752f, CanvasHeight = 1536f;
         private const float GroundRow = 1262f;                        // the red line (it slants a little; this is its middle)
+        private const float HillPathRow = 880f;                       // the middle of the hill's dirt path: set down onto the red line, the path the player runs on
         private const float ChunkWidth = CanvasWidth / CanvasPixelsPerUnit;
         private static readonly Vector2[] TowerZones = { new Vector2(134f, 568f), new Vector2(1577f, 2004f) }; // pink: where a tower's middle may go
         private static readonly Vector2 HutZone = new Vector2(2116f, 2661f);                                   // blue: where a hut's middle may go
@@ -39,7 +42,8 @@ namespace StickDuel
         private const float TowerMiddle = 1776f, Lookout = 532f, LookoutHalfWidth = 205f;  // the archer stands on the lookout's floor
         private const float HutMiddle = 2384f;                                             // the roof's peak, above the opening's middle
         private static readonly Vector2[] Roof = { new Vector2(2043f, 1268f), new Vector2(2384f, 1013f), new Vector2(2716f, 1268f) }; // black lines, top edge (ends dipped into the ground)
-        private const float SniperShoulderRow = 1330f;                                     // chest and rifle over the parapet, legs behind it
+        private const float SniperShoulderRow = 1330f;
+        private const float HutTowerGap = 420f;                                            // canvas px between a tower's middle and the next hut's                                     // chest and rifle over the parapet, legs behind it
 
         private const float ViewSize = 5.6f, ViewBottom = -2f; // the camera never shows past the canvas' bottom or top
         private const float StartGap = 9f;                     // nothing stands this close ahead at the start
@@ -47,10 +51,14 @@ namespace StickDuel
 
         [Tooltip("The runner's health (an arrow does up to 30, a sniper bullet about 34, 50 to the head).")]
         [SerializeField, Min(1f)] private float runnerHealth = 100f;
-        [Tooltip("Chance a tower or hut spot is filled at the start, rising by RampPerMetre to MaxChance.")]
-        [SerializeField, Range(0f, 1f)] private float startChance = 0.4f;
-        [SerializeField, Min(0f)] private float rampPerMetre = 1f / 1500f;
-        [SerializeField, Range(0f, 1f)] private float maxChance = 0.85f;
+        [Tooltip("Chance each of a repeat's two tower spots is filled at the start, rising per metre run to the max.")]
+        [SerializeField, Range(0f, 1f)] private float towerStartChance = 0.2f;
+        [SerializeField, Min(0f)] private float towerRampPerMetre = 1f / 800f;
+        [SerializeField, Range(0f, 1f)] private float towerMaxChance = 0.8f;
+        [Tooltip("Chance a repeat's hut spot is filled at the start, rising per metre run to the max.")]
+        [SerializeField, Range(0f, 1f)] private float hutStartChance = 0.12f;
+        [SerializeField, Min(0f)] private float hutRampPerMetre = 1f / 900f;
+        [SerializeField, Range(0f, 1f)] private float hutMaxChance = 0.65f;
 
         private sealed class Post
         {
@@ -68,6 +76,7 @@ namespace StickDuel
         private Sprite tower, hut, hutWindow;
         private readonly List<Post> posts = new List<Post>();
         private float startX, nextChunk, startTime, distance, time;
+        private float clearFrom; // canvas x in the next repeat a tower's middle must keep to (the last hut's gap)
         private bool running, over;
 
         public float Distance => distance;
@@ -89,7 +98,7 @@ namespace StickDuel
             player.MaxHealth = runnerHealth;
             if (player.TryGetComponent(out PlayerDriver driver))
             {
-                driver.AutoRun = true;
+                driver.AutoRun = true; // shield only; A / D still steer
             }
             else
             {
@@ -110,7 +119,7 @@ namespace StickDuel
             world = new GameObject("RunWorld").transform;
             float bottom = World(0f, CanvasHeight).y;
             Treadmill.Create(world, "Sky", Layer("RunSky"), -30, 0f, 0.9f, bottom);
-            Treadmill.Create(world, "Hill", Layer("RunHill"), -25, 0f, 0.6f, bottom);
+            Treadmill.Create(world, "Hill", Layer("RunHill"), -18, 0f, 0f, bottom - (GroundRow - HillPathRow) / CanvasPixelsPerUnit); // fixed in the world, over the grass: the feet never slide on it
             Treadmill.Create(world, "Grass", Layer("RunGround"), -20, 0f, 0f, bottom);
             tower = Piece("RunTower", TowerCrop, TowerMiddle, TowerCrop.yMax);
             hut = Piece("RunHut", HutCrop, HutMiddle, GroundRow);
@@ -177,9 +186,10 @@ namespace StickDuel
             player.ResetFighter(new Vector2(startX, Fighter.HipHeight + 0.05f));
             nextChunk = startX + StartGap - TowerZones[0].x / CanvasPixelsPerUnit;
             distance = time = 0f;
+            clearFrom = 0f;
             duel.HideEnemyBars();
             duel.HideShurikenIcons();
-            duel.SetHint("W  jump    Q / E  roll (no damage)    MOUSE  shield    R  run again    ESC  menu");
+            duel.SetHint("A / D  run    W  jump    Q / E  roll (no damage)    MOUSE  shield    R  run again    ESC  menu");
             UpdateLabel();
 
             player.ControlsEnabled = false;
@@ -255,21 +265,32 @@ namespace StickDuel
             duel.Show("YOU FELL", $"Ran {distance:0} m in {Clock(time)}      Press R to run again", new Color(1f, 0.4f, 0.4f));
         }
 
-        /// <summary>One repeat of the canvas: each tower stretch and the hut stretch filled or not, by the current chance.</summary>
+        /// <summary>
+        /// One repeat of the canvas: each tower stretch and the hut stretch filled or not, sparse at the start and
+        /// filling up with the distance run. Huts and towers keep HutTowerGap apart, across repeats too.
+        /// </summary>
         private void Spawn(float chunk)
         {
-            float chance = Mathf.Min(startChance + distance * rampPerMetre, maxChance);
+            float towerChance = Mathf.Min(towerStartChance + distance * towerRampPerMetre, towerMaxChance);
+            float hutChance = Mathf.Min(hutStartChance + distance * hutRampPerMetre, hutMaxChance);
+            float hutFrom = HutZone.x;
             foreach (Vector2 zone in TowerZones)
             {
-                if (Random.value < chance)
+                float from = Mathf.Max(zone.x, clearFrom);
+                if (from <= zone.y && Random.value < towerChance)
                 {
-                    Tower(chunk + Random.Range(zone.x, zone.y) / CanvasPixelsPerUnit);
+                    float middle = Random.Range(from, zone.y);
+                    Tower(chunk + middle / CanvasPixelsPerUnit);
+                    hutFrom = Mathf.Max(hutFrom, middle + HutTowerGap);
                 }
             }
 
-            if (Random.value < chance * 0.8f)
+            clearFrom = 0f;
+            if (Random.value < hutChance)
             {
-                Hut(chunk + Random.Range(HutZone.x, HutZone.y) / CanvasPixelsPerUnit);
+                float middle = Random.Range(hutFrom, HutZone.y);
+                Hut(chunk + middle / CanvasPixelsPerUnit);
+                clearFrom = middle + HutTowerGap - CanvasWidth;
             }
         }
 
@@ -279,10 +300,10 @@ namespace StickDuel
             var root = new GameObject("ArcherTower").transform;
             root.SetParent(world, false);
             float shift = x - TowerMiddle / CanvasPixelsPerUnit; // canvas x → world x for this tower
-            root.position = new Vector2(x, World(0f, TowerCrop.yMax).y);
+            root.position = new Vector2(x, 0f); // the base on the red line, the near grass the player runs on
             Art(root, "Tower", tower, -15);
 
-            float floor = World(0f, Lookout).y;
+            float floor = (TowerCrop.yMax - Lookout) / CanvasPixelsPerUnit;
             Perch(root, new Vector2(x, floor), LookoutHalfWidth * 2f / CanvasPixelsPerUnit);
             Fighter archer = Bot(WeaponType.Bow, new Vector2(x, floor + Fighter.HipHeight + 0.05f), 1f, out GameObject sword);
             posts.Add(new Post { Root = root.gameObject, Right = shift + TowerCrop.xMax / CanvasPixelsPerUnit, Bot = archer, Sword = sword });

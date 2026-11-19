@@ -36,6 +36,8 @@ namespace StickDuel
         public float MinY { set => minY = value; }
         /// <summary>Highest the camera centre goes (Sniper Mode pins it to the painting's middle). Unlimited by default.</summary>
         public float MaxY { set => maxY = value; }
+        /// <summary>Closest zoom; equal to the max size it fixes the zoom (the train).</summary>
+        public float MinSize { set => minSize = value; }
         /// <summary>Fixed follow: the view looks this far ahead of the target sideways (RUN! shows more of what is coming).</summary>
         public float LeadX { set => leadX = value; }
 

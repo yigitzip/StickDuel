@@ -15,6 +15,8 @@ namespace StickDuel
         public const string SwordLayer = "Sword";
         public const string SwordHitLayer = "SwordHit";
         public const float HipHeight = 0.95f;
+        /// <summary>Width of the box (feet to hip) that finds a vine to take hold of; adds to the vine's own ClimbWidth.</summary>
+        private const float ZoneReach = 0.4f;
         public const float ShoulderHeight = 0.64f;
         private const float CorpseHorizontalDeceleration = 4f;
 
@@ -272,9 +274,19 @@ namespace StickDuel
             UpdatePunch(dt);
             UpdateKick(dt);
             bool canAct = ControlsEnabled && staggerTimer <= 0f;
-            if (!IsHanging && canAct && !IsGrounded && usesVines && climbInput != 0f && Time.time >= regrabTime)
+            // W takes hold of a vine on the ground too (S only in the air: on the ground it would climb into the floor).
+            if (!IsHanging && canAct && usesVines && Time.time >= regrabTime && (climbInput > 0f || (climbInput < 0f && !IsGrounded)))
             {
-                climbZone = ZoneAt(Body.position);
+                climbZone = ZoneAt();
+                if (climbZone != null && IsGrounded && climbZone.bounds.max.y < Body.position.y - HipHeight + 0.5f)
+                {
+                    climbZone = null; // standing at the vine's very top (on its ledge): nothing left to climb
+                }
+
+                if (climbZone != null)
+                {
+                    jumpRequestTime = -1f; // W is also jump: the press that grabbed must not jump off
+                }
             }
 
             if (IsHanging)
@@ -315,10 +327,14 @@ namespace StickDuel
             Body.linearVelocity = velocity;
         }
 
-        private Collider2D ZoneAt(Vector2 point)
+        /// <summary>
+        /// The vine this fighter's legs and hips touch, from feet to hip and <see cref="ZoneReach"/> wide, so the
+        /// first frame of contact counts (not only once the hip itself is inside the vine's strip).
+        /// </summary>
+        private Collider2D ZoneAt()
         {
             var filter = new ContactFilter2D { useTriggers = true };
-            int count = Physics2D.OverlapPoint(point, filter, zoneHits);
+            int count = Physics2D.OverlapBox(Body.position + Vector2.down * (HipHeight * 0.5f), new Vector2(ZoneReach, HipHeight), 0f, filter, zoneHits);
             for (int i = 0; i < count; i++)
             {
                 if (zoneHits[i].GetComponent<ClimbZone>() != null)
@@ -359,13 +375,17 @@ namespace StickDuel
             {
                 Bounds zone = climbZone.bounds;
                 float feet = Body.position.y - HipHeight;
+                jumpRequestTime = -1f; // W taps on a vine climb it; buffered, they would fire a full jump on landing at the top
                 velocity = new Vector2(Mathf.Clamp((zone.center.x - Body.position.x) * 12f, -moveSpeed, moveSpeed), climbInput * climbSpeed);
-                if (velocity.y < 0f && feet <= zone.min.y)
+                if (velocity.y < 0f && Body.IsTouching(groundFilter))
                 {
-                    velocity.y = 0f; // the vine ends here: hang on
+                    LetGo(); // climbed down onto the ground: walk on
                 }
-
-                if (feet >= zone.max.y)
+                else if (velocity.y < 0f && feet <= zone.min.y)
+                {
+                    velocity.y = 0f; // the vine ends here over nothing: hang on
+                }
+                else if (feet >= zone.max.y)
                 {
                     velocity.y = 3f; // over the top: onto the ledge
                     LetGo();
@@ -615,9 +635,9 @@ namespace StickDuel
             }
 
             Health = Mathf.Max(0f, Health - damage);
-            if (IsHanging)
+            if (climbZone != null)
             {
-                LetGo(); // a hit knocks you off the vine
+                LetGo(); // a hit knocks you off a climbing vine; the swinging ivy keeps its rider (Hang pulls it back under the tip)
             }
 
             Body.linearVelocity = new Vector2(Body.linearVelocity.x * 0.3f, Mathf.Max(Body.linearVelocity.y, 0f));
