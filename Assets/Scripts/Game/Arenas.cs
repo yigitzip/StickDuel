@@ -152,7 +152,7 @@ namespace StickDuel
             },
             new Arena
             {
-                Name = "DRAGON VOLCANO", Blurb = "Floor pieces sink into the lava", Texture = "Bg_volcano", GroundRow = 712f,
+                Name = "VOLCANO", Blurb = "Floor pieces sink into the lava", Texture = "Bg_volcano", GroundRow = 712f,
                 // The painted floor is replaced by a lava sea (Tools/prepare_backgrounds.py) with pieces on it.
                 // The painted ledges are painted out too: the whole fight is on the pieces.
                 Pieces = new[] { 147f, 473f, 800f, 1127f, 1453f },
