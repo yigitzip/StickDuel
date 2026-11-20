@@ -146,6 +146,7 @@ namespace StickDuel
             new Arena
             {
                 Name = "FLOATING ISLES", Blurb = "Islands over the void, falling is death", Texture = "Bg_isles", GroundRow = 695f,
+                CropSides = true,
                 Floors = new[] { new Vector3(360f, 1245f, 695f), new Vector3(0f, 80f, 610f), new Vector3(1520f, 1600f, 610f) },
                 Ledges = new[] { new Vector3(118f, 328f, 485f), new Vector3(1272f, 1482f, 485f) },
                 Motes = new Color(1f, 0.85f, 1f, 0.9f), MotesVelocity = new Vector2(0f, 0.35f), MotesRow = 780f, MotesRate = 22f,
